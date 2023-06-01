@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.2.1
+
+### Patch Changes
+
+-   0d85f99: simplifying some typings
+
 ## 0.2.0
 
 ### Minor Changes
