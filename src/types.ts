@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
+import { Dynamon } from '@typemon/dynamon';
 
 export type ValidKeys<Schema extends TSchema, S = Static<Schema>> = {
     [K in keyof S]-?: S[K] extends string | number ? K : never;
@@ -53,6 +54,12 @@ export interface Gsi<Schema extends TSchema = TSchema> {
 export type InputTransformer<Schema extends TSchema, I = Static<Schema>> = (input: I) => Static<Schema>;
 export type OutputTransformer<Schema extends TSchema, O = Static<Schema>> = (output: Static<Schema>) => O;
 
+export type Input<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = C['transformInput'] extends InputTransformer<Schema>
+    ? Parameters<C['transformInput']>[0]
+    : Static<Schema>;
+
+export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'> & { log?: boolean };
+
 export interface DdbRepositoryLogBase {
     time: number;
     duration: number;
@@ -72,6 +79,7 @@ export interface DdbRepositoryDeleteLog<Schema extends TSchema> extends DdbRepos
 export interface DdbRepositoryUpdateLog<Schema extends TSchema> extends DdbRepositoryLogBase {
     operation: 'UPDATE';
     item: Static<Schema>;
+    prevItem?: Static<Schema>;
 }
 
 export type DdbRepositoryLog<Schema extends TSchema> =

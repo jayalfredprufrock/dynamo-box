@@ -14,7 +14,7 @@ export const removeUndefined = (obj: any) => {
     return obj;
 };
 
-export const hrTimeMs = (): number => {
-    const [seconds, nanoseconds] = process.hrtime();
+export const hrTimeToMs = (startTime?: [number, number]): number => {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
     return seconds * 1000 + nanoseconds / 1000000;
 };

@@ -9,12 +9,12 @@ import {
     DdbRepositoryRuntimeConfig,
     Gsi,
     GsiKeysToObj,
-    InputTransformer,
+    Input,
     KeysToObj,
     Merge,
     OutputTransformer,
 } from './types.js';
-import { hrTimeMs, removeUndefined } from './util.js';
+import { hrTimeToMs, removeUndefined } from './util.js';
 
 export const makeDdbRepository =
     <Schema extends TSchema>(schema: Schema) =>
@@ -22,7 +22,6 @@ export const makeDdbRepository =
         abstract class DdbRepository<
             GSIs = C['gsis'],
             KeysObj extends object = KeysToObj<Schema, C['keys']>,
-            Input = C['transformInput'] extends InputTransformer<Schema> ? Parameters<C['transformInput']>[0] : Static<Schema>,
             Output = C['transformOutput'] extends OutputTransformer<Schema> ? ReturnType<C['transformOutput']> : Static<Schema>
         > {
             readonly schema: Schema = schema;
@@ -120,7 +119,7 @@ export const makeDdbRepository =
             }
 
             async create(
-                data: Input,
+                data: Input<Schema, C>,
                 options?: Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'>
             ): Promise<Output> {
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
@@ -130,8 +129,9 @@ export const makeDdbRepository =
                 return this.put(item, { ...options, conditionExpressionSpec });
             }
 
-            async put(data: Input, options?: Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'>): Promise<Output> {
-                const time = hrTimeMs();
+            async put(data: Input<Schema, C>, options?: Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'>): Promise<Output> {
+                const time = Date.now();
+                const start = process.hrtime();
 
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
 
@@ -147,7 +147,7 @@ export const makeDdbRepository =
                 this.logger?.({
                     operation: 'PUT',
                     time,
-                    duration: hrTimeMs() - time,
+                    duration: hrTimeToMs(start),
                     item,
                     prevItem,
                 });
@@ -160,7 +160,8 @@ export const makeDdbRepository =
                 dataOrExpression: ExpressionSpec | Partial<Omit<Static<Schema>, NonNullable<C['keys'][number]>>>,
                 options?: Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec'>
             ): Promise<Output> {
-                const time = hrTimeMs();
+                const time = Date.now();
+                const start = process.hrtime();
 
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
@@ -180,7 +181,7 @@ export const makeDdbRepository =
                 this.logger?.({
                     operation: 'UPDATE',
                     time,
-                    duration: hrTimeMs() - time,
+                    duration: hrTimeToMs(start),
                     item,
                 });
 
@@ -191,7 +192,8 @@ export const makeDdbRepository =
                 keys: KeysObj,
                 options?: Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'>
             ): Promise<Output | undefined> {
-                const time = hrTimeMs();
+                const time = Date.now();
+                const start = process.hrtime();
 
                 const prevItem = await this.db.delete({
                     tableName: this.tableName,
@@ -205,7 +207,7 @@ export const makeDdbRepository =
                 this.logger?.({
                     operation: 'DELETE',
                     time,
-                    duration: hrTimeMs() - time,
+                    duration: hrTimeToMs(start),
                     prevItem,
                 });
 
@@ -230,8 +232,8 @@ export const makeDdbRepository =
             }
 
             async batchWrite(
-                batchOps: ({ type: 'Delete'; primaryKey: KeysObj } | { type: 'Put'; item: Input })[]
-            ): Promise<((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input })[] | undefined> {
+                batchOps: ({ type: 'Delete'; primaryKey: KeysObj } | { type: 'Put'; item: Input<Schema, C> })[]
+            ): Promise<((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input<Schema, C> })[] | undefined> {
                 const response = await this.db.batchWrite({
                     [this.tableName]: batchOps.map(op => {
                         if (op.type === 'Put') {
@@ -246,7 +248,7 @@ export const makeDdbRepository =
 
                 if (!response || !response[this.tableName]?.length) return;
 
-                return response[this.tableName] as ((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input })[] | undefined;
+                return response[this.tableName] as ((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input<Schema, C> })[] | undefined;
             }
 
             async batchDelete(batchKeys: KeysObj[]): Promise<KeysObj[] | undefined> {
@@ -256,13 +258,31 @@ export const makeDdbRepository =
                 return response.map(op => (op as Dynamon.BatchWrite.Delete).primaryKey) as KeysObj[];
             }
 
-            async batchPut(batchItems: Input[]): Promise<Input[] | undefined> {
+            async batchPut(batchItems: Input<Schema, C>[]): Promise<Input<Schema, C>[] | undefined> {
                 const response = await this.batchWrite(batchItems.map(item => ({ type: 'Put', item })));
                 if (!response || !response.length) return;
 
-                return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input[];
+                return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input<Schema, C>[];
             }
         }
 
         return DdbRepository;
     };
+
+/*
+const JobSchema = Type.Object({ id: Type.String(), name: Type.String() });
+type Job = Static<typeof JobSchema>;
+export class JobRepository extends makeDdbRepository(JobSchema)({
+    keys: ['id'],
+    transformInput: (input: DistOmit<Job, 'id'>): Job => ({
+        id: `J123`,
+        ...input,
+    }),
+    gsis: {
+        byNAme: {
+            schema: JobSchema,
+            keys: ['name'],
+        },
+    },
+}) {}
+*/
