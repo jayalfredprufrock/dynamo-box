@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
-import { Dynamon } from '@typemon/dynamon';
+import { Dynamon, ExpressionSpec } from '@typemon/dynamon';
 
 export type ValidKeys<Schema extends TSchema, S = Static<Schema>> = {
     [K in keyof S]-?: S[K] extends string | number ? K : never;
@@ -17,8 +17,8 @@ export type KeysToObj<Schema extends TSchema, K extends Keys<Schema>, PkOnly = f
 };
 
 export type ValidGsiKeys<S> = DistKeys<S>;
-export type GsiKeys<S> = Readonly<[ValidGsiKeys<S>, ValidGsiKeys<S>?]>;
-export type GsiKeysToObj<S, K extends GsiKeys<S>> = {
+export type Gsis<S> = Readonly<[ValidGsiKeys<S>, ValidGsiKeys<S>?]>;
+export type GsiKeysToObj<S, K extends Gsis<S>> = {
     [k in NonNullable<K[number]>]: S[k];
 };
 
@@ -48,7 +48,7 @@ export type Merge<T extends object> = {
 
 export interface Gsi<Schema extends TSchema = TSchema> {
     schema: Schema;
-    keys: GsiKeys<Static<Schema>>;
+    keys: Gsis<Static<Schema>>;
 }
 
 export type InputTransformer<Schema extends TSchema, I = Static<Schema>> = (input: I) => Static<Schema>;
@@ -58,11 +58,52 @@ export type Input<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>>
     ? Parameters<C['transformInput']>[0]
     : Static<Schema>;
 
+export type Output<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = C['transformOutput'] extends OutputTransformer<Schema>
+    ? ReturnType<C['transformOutput']>
+    : Static<Schema>;
+
+export type GsiKeys<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = keyof C['gsis'];
+export type KeysObj<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = KeysToObj<Schema, C['keys']>;
+export type PrimaryKeyObj<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = KeysToObj<Schema, C['keys'], true>;
+export type GsiKeysObj<
+    Schema extends TSchema,
+    C extends DdbRepositoryConfig<Schema>,
+    G extends keyof C['gsis']
+> = C['gsis'][G] extends Gsi<Schema>
+    ? GsiKeysToObj<Static<C['gsis'][G]['schema']> extends object ? Merge<Static<C['gsis'][G]['schema']>> : never, C['gsis'][G]['keys']>
+    : never;
+
+export type ScanOptions = Omit<Dynamon.Scan, 'tableName'> & { log?: boolean };
+export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & { log?: boolean };
+export type QueryOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec'> & { log?: boolean };
 export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'> & { log?: boolean };
+export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'> & { log?: boolean };
+export type UpdateData<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> =
+    | ExpressionSpec
+    | Partial<Omit<Static<Schema>, NonNullable<C['keys'][number]>>>;
+export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec'> & { log?: boolean };
+export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & { log?: boolean };
 
 export interface DdbRepositoryLogBase {
     time: number;
     duration: number;
+}
+
+export interface DdbRepositoryGetLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+    operation: 'GET';
+    item?: Static<Schema>;
+}
+
+export interface DdbRepositoryScanLog extends DdbRepositoryLogBase {
+    operation: 'SCAN';
+    itemCount: number;
+    gsi?: string;
+}
+
+export interface DdbRepositoryQueryLog extends DdbRepositoryLogBase {
+    operation: 'QUERY';
+    itemCount: number;
+    gsi?: string;
 }
 
 export interface DdbRepositoryPutLog<Schema extends TSchema> extends DdbRepositoryLogBase {
@@ -83,6 +124,9 @@ export interface DdbRepositoryUpdateLog<Schema extends TSchema> extends DdbRepos
 }
 
 export type DdbRepositoryLog<Schema extends TSchema> =
+    | DdbRepositoryScanLog
+    | DdbRepositoryQueryLog
+    | DdbRepositoryGetLog<Schema>
     | DdbRepositoryPutLog<Schema>
     | DdbRepositoryDeleteLog<Schema>
     | DdbRepositoryUpdateLog<Schema>;
