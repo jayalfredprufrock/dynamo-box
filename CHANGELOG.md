@@ -1,5 +1,15 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.3.0
+
+### Minor Changes
+
+-   247d659: feat: log support for get, scan, and query operations
+
+### Patch Changes
+
+-   247d659: More typing improvements
+
 ## 0.2.1
 
 ### Patch Changes
