@@ -53,6 +53,34 @@ export interface Gsi<Schema extends TSchema = TSchema> {
 export type InputTransformer<Schema extends TSchema, I = Static<Schema>> = (input: I) => Static<Schema>;
 export type OutputTransformer<Schema extends TSchema, O = Static<Schema>> = (output: Static<Schema>) => O;
 
+export interface DdbRepositoryLogBase {
+    time: number;
+    duration: number;
+}
+
+export interface DdbRepositoryPutLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+    operation: 'PUT';
+    item: Static<Schema>;
+    prevItem?: Static<Schema>;
+}
+
+export interface DdbRepositoryDeleteLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+    operation: 'DELETE';
+    prevItem?: Static<Schema>;
+}
+
+export interface DdbRepositoryUpdateLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+    operation: 'UPDATE';
+    item: Static<Schema>;
+}
+
+export type DdbRepositoryLog<Schema extends TSchema> =
+    | DdbRepositoryPutLog<Schema>
+    | DdbRepositoryDeleteLog<Schema>
+    | DdbRepositoryUpdateLog<Schema>;
+
+export type DdbRepositoryLogger<Schema extends TSchema> = (log: DdbRepositoryLog<Schema>) => void;
+
 export interface DdbRepositoryConfig<Schema extends TSchema = TSchema, I = Static<Schema>, O = Static<Schema>> {
     client?: DynamoDBClient;
     tableName?: string;
@@ -61,6 +89,7 @@ export interface DdbRepositoryConfig<Schema extends TSchema = TSchema, I = Stati
     transformInput?: InputTransformer<Schema, I>;
     transformOutput?: OutputTransformer<Schema, O>;
     gsis?: Record<string, Gsi<Schema>>;
+    logger?: DdbRepositoryLogger<Schema>;
 }
 
-export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate'>;
+export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate' | 'logger'>;

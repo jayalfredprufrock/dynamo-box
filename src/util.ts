@@ -13,3 +13,8 @@ export const removeUndefined = (obj: any) => {
     }
     return obj;
 };
+
+export const hrTimeMs = (): number => {
+    const [seconds, nanoseconds] = process.hrtime();
+    return seconds * 1000 + nanoseconds / 1000000;
+};

@@ -5,6 +5,7 @@ import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
 import {
     DdbRepositoryConfig,
+    DdbRepositoryLogger,
     DdbRepositoryRuntimeConfig,
     Gsi,
     GsiKeysToObj,
@@ -13,7 +14,7 @@ import {
     Merge,
     OutputTransformer,
 } from './types.js';
-import { removeUndefined } from './util.js';
+import { hrTimeMs, removeUndefined } from './util.js';
 
 export const makeDdbRepository =
     <Schema extends TSchema>(schema: Schema) =>
@@ -30,6 +31,8 @@ export const makeDdbRepository =
             readonly tableName: string;
             readonly validate: boolean;
 
+            readonly logger?: DdbRepositoryLogger<Schema>;
+
             constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
                 const client = runtimeConfig?.client ?? config.client;
                 if (!client) {
@@ -45,6 +48,7 @@ export const makeDdbRepository =
 
                 this.tableName = tableName;
                 this.validate = runtimeConfig?.validate ?? config?.validate ?? false;
+                this.logger = runtimeConfig?.logger ?? config?.logger;
             }
 
             async get(keys: KeysObj, options?: Omit<Dynamon.Get, 'tableName' | 'primaryKey'>): Promise<Output | undefined> {
@@ -126,16 +130,29 @@ export const makeDdbRepository =
                 return this.put(item, { ...options, conditionExpressionSpec });
             }
 
-            async put(data: Input, options?: Omit<Dynamon.Put, 'tableName' | 'item'>): Promise<Output> {
+            async put(data: Input, options?: Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'>): Promise<Output> {
+                const time = hrTimeMs();
+
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
 
-                await this.db.put({
+                const prevItem = await this.db.put({
                     tableName: this.tableName,
                     item,
+                    returnValues: 'ALL_OLD',
                     ...options,
                 });
 
-                return config.transformOutput?.(item) ?? item;
+                const output = config.transformOutput?.(item) ?? item;
+
+                this.logger?.({
+                    operation: 'PUT',
+                    time,
+                    duration: hrTimeMs() - time,
+                    item,
+                    prevItem,
+                });
+
+                return output;
             }
 
             async update(
@@ -143,12 +160,14 @@ export const makeDdbRepository =
                 dataOrExpression: ExpressionSpec | Partial<Omit<Static<Schema>, NonNullable<C['keys'][number]>>>,
                 options?: Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec'>
             ): Promise<Output> {
+                const time = hrTimeMs();
+
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
                     : // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       update(...Object.keys(removeUndefined(dataOrExpression)).map(k => set(k, (dataOrExpression as any)[k])));
 
-                const updatedItem = await this.db.update({
+                const item = await this.db.update({
                     tableName: this.tableName,
                     primaryKey: keys,
                     returnValues: 'ALL_NEW',
@@ -156,21 +175,41 @@ export const makeDdbRepository =
                     ...options,
                 });
 
-                return config.transformOutput?.(updatedItem) ?? updatedItem;
+                const output = config.transformOutput?.(item) ?? item;
+
+                this.logger?.({
+                    operation: 'UPDATE',
+                    time,
+                    duration: hrTimeMs() - time,
+                    item,
+                });
+
+                return output;
             }
 
             async delete(
                 keys: KeysObj,
                 options?: Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'>
             ): Promise<Output | undefined> {
-                const deletedItem = await this.db.delete({
+                const time = hrTimeMs();
+
+                const prevItem = await this.db.delete({
                     tableName: this.tableName,
                     returnValues: 'ALL_OLD',
                     primaryKey: keys,
                     ...options,
                 });
 
-                return deletedItem !== undefined ? config.transformOutput?.(deletedItem) ?? deletedItem : undefined;
+                const prevOutput = prevItem !== undefined ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
+
+                this.logger?.({
+                    operation: 'DELETE',
+                    time,
+                    duration: hrTimeMs() - time,
+                    prevItem,
+                });
+
+                return prevOutput;
             }
 
             async batchGet(
