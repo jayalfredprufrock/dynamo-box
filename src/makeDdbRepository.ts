@@ -3,11 +3,20 @@ import { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, ExpressionSpec, set, update } from '@typemon/dynamon';
 import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
-import { DdbRepositoryConfig, Gsi, GsiKeysToObj, InputTransformer, KeysToObj, Merge, OutputTransformer } from './types.js';
+import {
+    DdbRepositoryConfig,
+    DdbRepositoryRuntimeConfig,
+    Gsi,
+    GsiKeysToObj,
+    InputTransformer,
+    KeysToObj,
+    Merge,
+    OutputTransformer,
+} from './types.js';
 import { removeUndefined } from './util.js';
 
 export const makeDdbRepository =
-    <Schema extends TSchema>(_schema: Schema) =>
+    <Schema extends TSchema>(schema: Schema) =>
     <C extends DdbRepositoryConfig<Schema>>(config: C) => {
         abstract class DdbRepository<
             GSIs = C['gsis'],
@@ -15,12 +24,32 @@ export const makeDdbRepository =
             Input = C['transformInput'] extends InputTransformer<Schema> ? Parameters<C['transformInput']>[0] : Static<Schema>,
             Output = C['transformOutput'] extends OutputTransformer<Schema> ? ReturnType<C['transformOutput']> : Static<Schema>
         > {
-            readonly client: DynamoDBClient = config.client;
-            readonly db = new Dynamon(config.client);
+            readonly schema: Schema = schema;
+            readonly client: DynamoDBClient;
+            readonly db: Dynamon;
+            readonly tableName: string;
+            readonly validate: boolean;
+
+            constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
+                const client = runtimeConfig?.client ?? config.client;
+                if (!client) {
+                    throw new Error('Client must be passed in "makeDdbRepository" config or within the constructor.');
+                }
+                this.client = client;
+                this.db = new Dynamon(this.client);
+
+                const tableName = runtimeConfig?.tableName ?? config?.tableName;
+                if (!tableName) {
+                    throw new Error('Table name must be passed in "makeDdbRepository" config or within the constructor.');
+                }
+
+                this.tableName = tableName;
+                this.validate = runtimeConfig?.validate ?? config?.validate ?? false;
+            }
 
             async get(keys: KeysObj, options?: Omit<Dynamon.Get, 'tableName' | 'primaryKey'>): Promise<Output | undefined> {
                 const item = await this.db.get({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     primaryKey: keys,
                     ...options,
                 });
@@ -30,7 +59,7 @@ export const makeDdbRepository =
 
             async scan(options?: Omit<Dynamon.Scan, 'tableName'>): Promise<Output[]> {
                 const items = await this.db.scanAll({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     ...options,
                 });
 
@@ -46,7 +75,7 @@ export const makeDdbRepository =
                 options?: Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec'>
             ): Promise<Output[]> {
                 const items = await this.db.queryAll({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     keyConditionExpressionSpec: equal(config.keys[0], keys[config.keys[0]]),
                     ...options,
                 });
@@ -70,10 +99,11 @@ export const makeDdbRepository =
                     throw new Error(`Unrecognized GSI "${String(name)}"`);
                 }
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const keyConditionExpressionSpec = and(...Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k])));
 
                 const items = await this.db.queryAll({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     keyConditionExpressionSpec,
                     ...options,
                 });
@@ -100,7 +130,7 @@ export const makeDdbRepository =
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
 
                 await this.db.put({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     item,
                     ...options,
                 });
@@ -115,10 +145,11 @@ export const makeDdbRepository =
             ): Promise<Output> {
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
-                    : update(...Object.keys(removeUndefined(dataOrExpression)).map(k => set(k, (dataOrExpression as any)[k])));
+                    : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      update(...Object.keys(removeUndefined(dataOrExpression)).map(k => set(k, (dataOrExpression as any)[k])));
 
                 const updatedItem = await this.db.update({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     primaryKey: keys,
                     returnValues: 'ALL_NEW',
                     updateExpressionSpec,
@@ -133,7 +164,7 @@ export const makeDdbRepository =
                 options?: Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'>
             ): Promise<Output | undefined> {
                 const deletedItem = await this.db.delete({
-                    tableName: config.tableName,
+                    tableName: this.tableName,
                     returnValues: 'ALL_OLD',
                     primaryKey: keys,
                     ...options,
@@ -147,15 +178,15 @@ export const makeDdbRepository =
                 options?: Omit<Dynamon.BatchGet.Operation, 'primaryKeys'>
             ): Promise<{ responses: Static<Schema>[]; unprocessed: KeysObj[] | undefined }> {
                 const { responses, unprocessed } = await this.db.batchGet({
-                    [config.tableName]: {
+                    [this.tableName]: {
                         primaryKeys: batchKeys,
                         ...options,
                     },
                 });
 
                 return {
-                    responses: (responses[config.tableName] as Static<Schema>[] | undefined) ?? [],
-                    unprocessed: unprocessed?.[config.tableName]?.primaryKeys as KeysObj[] | undefined,
+                    responses: (responses[this.tableName] as Static<Schema>[] | undefined) ?? [],
+                    unprocessed: unprocessed?.[this.tableName]?.primaryKeys as KeysObj[] | undefined,
                 };
             }
 
@@ -163,7 +194,7 @@ export const makeDdbRepository =
                 batchOps: ({ type: 'Delete'; primaryKey: KeysObj } | { type: 'Put'; item: Input })[]
             ): Promise<((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input })[] | undefined> {
                 const response = await this.db.batchWrite({
-                    [config.tableName]: batchOps.map(op => {
+                    [this.tableName]: batchOps.map(op => {
                         if (op.type === 'Put') {
                             return {
                                 type: 'Put',
@@ -174,9 +205,9 @@ export const makeDdbRepository =
                     }),
                 });
 
-                if (!response || !response[config.tableName]?.length) return;
+                if (!response || !response[this.tableName]?.length) return;
 
-                return response[config.tableName] as ((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input })[] | undefined;
+                return response[this.tableName] as ((KeysObj & { type: 'Delete' }) | { type: 'Put'; item: Input })[] | undefined;
             }
 
             async batchDelete(batchKeys: KeysObj[]): Promise<KeysObj[] | undefined> {
