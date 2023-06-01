@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.2.0
+
+### Minor Changes
+
+-   b607ec4: logger support
+
 ## 0.1.1
 
 ### Patch Changes
