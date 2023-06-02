@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.3.2
+
+### Patch Changes
+
+-   72f06c0: fixes to GSI operations and types
+
 ## 0.3.1
 
 ### Patch Changes
