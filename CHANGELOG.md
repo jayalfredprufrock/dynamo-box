@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.4.0
+
+### Minor Changes
+
+-   4f4008c: fix: specify partition and sort keys separately. support GSI projections
+
 ## 0.3.2
 
 ### Patch Changes
