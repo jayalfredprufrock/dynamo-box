@@ -81,7 +81,7 @@ export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'
 export type UpdateData<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> =
     | ExpressionSpec
     | Partial<Omit<Static<Schema>, NonNullable<C['keys'][number]>>>;
-export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec'> & { log?: boolean };
+export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & { log?: boolean };
 export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & { log?: boolean };
 
 export interface DdbRepositoryLogBase {
@@ -114,6 +114,7 @@ export interface DdbRepositoryPutLog<Schema extends TSchema> extends DdbReposito
 
 export interface DdbRepositoryDeleteLog<Schema extends TSchema> extends DdbRepositoryLogBase {
     operation: 'DELETE';
+    item?: undefined;
     prevItem?: Static<Schema>;
 }
 
