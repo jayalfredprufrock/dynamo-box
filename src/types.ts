@@ -4,145 +4,178 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
 import { Dynamon, ExpressionSpec } from '@typemon/dynamon';
 
-export type ValidKeys<Schema extends TSchema, S = Static<Schema>> = {
-    [K in keyof S]-?: S[K] extends string | number ? K : never;
-}[keyof S];
-
-export type Keys<Schema extends TSchema> = Readonly<[ValidKeys<Schema>, ValidKeys<Schema>?]> extends Readonly<[string, string?]>
-    ? Readonly<[ValidKeys<Schema>, ValidKeys<Schema>?]>
-    : never;
-
-export type KeysToObj<Schema extends TSchema, K extends Keys<Schema>, PkOnly = false> = {
-    [k in NonNullable<K[PkOnly extends true ? 0 : number]>]: Static<Schema>[k];
-};
-
-export type ValidGsiKeys<S> = DistKeys<S>;
-export type Gsis<S> = Readonly<[ValidGsiKeys<S>, ValidGsiKeys<S>?]>;
-export type GsiKeysToObj<S, K extends Gsis<S>> = {
-    [k in NonNullable<K[number]>]: S[k];
-};
-
+/* Utility Types ------------------------------------------------------------------------------------------------------------- */
 export type CommonKeys<T extends object> = keyof T;
 export type AllKeys<T> = T extends any ? keyof T : never;
 export type Subtract<A, C> = A extends C ? never : A;
 export type NonCommonKeys<T extends object> = Subtract<AllKeys<T>, CommonKeys<T>>;
 export type PickType<T, K extends AllKeys<T>> = T extends { [k in K]?: any } ? T[K] : undefined;
 export type PickTypeOf<T, K extends string | number | symbol> = K extends AllKeys<T> ? PickType<T, K> : never;
-
-// Distributive variants primarly for union support
 export type FlattenType<T> = { [KeyType in keyof T]: T[KeyType] } & {};
-
 export type PartialSome<T, K extends keyof T> = FlattenType<Omit<T, K> & Partial<Pick<T, K>>>;
 export type RequiredSome<T, K extends keyof T> = FlattenType<Required<Pick<T, K>> & Omit<T, K>>;
-export type DistKeys<T> = T extends unknown ? keyof T : never;
-export type DistPick<T, K extends keyof T> = T extends unknown ? Pick<T, K> : never;
-export type DistOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-export type DistPartialSome<T, K extends keyof T> = T extends unknown ? PartialSome<T, K> : never;
-export type DistRequiredSome<T, K extends keyof T> = T extends unknown ? RequiredSome<T, K> : never;
-
 export type Merge<T extends object> = {
     [k in CommonKeys<T>]: PickTypeOf<T, k>;
 } & {
     [k in NonCommonKeys<T>]?: PickTypeOf<T, k>;
 };
 
-export interface Gsi<Schema extends TSchema = TSchema> {
-    schema: Schema;
-    keys: Gsis<Static<Schema>>;
-}
+// Distributive variants primarly for union support
+export type DistKeys<T> = T extends unknown ? keyof T : never;
+export type DistPick<T, K extends keyof T> = T extends unknown ? Pick<T, K> : never;
+export type DistOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
+export type DistPartialSome<T, K extends keyof T> = T extends unknown ? PartialSome<T, K> : never;
+export type DistRequiredSome<T, K extends keyof T> = T extends unknown ? RequiredSome<T, K> : never;
 
-export type InputTransformer<Schema extends TSchema, I = Static<Schema>> = (input: I) => Static<Schema>;
-export type OutputTransformer<Schema extends TSchema, O = Static<Schema>> = (output: Static<Schema>) => O;
+/* Configuration Types --------------------------------------------------------------------------------------------------------- */
 
-export type Input<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = C['transformInput'] extends InputTransformer<Schema>
-    ? Parameters<C['transformInput']>[0]
-    : Static<Schema>;
+// literal union of keys in the S that are eligible to be primary hash/range keys
+export type ValidPrimaryKeys<S extends TSchema, T = Static<S>> = {
+    [K in keyof T]-?: T[K] extends string | number ? K : never;
+}[keyof T];
 
-export type Output<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = C['transformOutput'] extends OutputTransformer<Schema>
-    ? ReturnType<C['transformOutput']>
-    : Static<Schema>;
-
-export type GsiKeys<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = keyof C['gsis'];
-export type KeysObj<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = KeysToObj<Schema, C['keys']>;
-export type PrimaryKeyObj<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> = KeysToObj<Schema, C['keys'], true>;
-export type GsiKeysObj<
-    Schema extends TSchema,
-    C extends DdbRepositoryConfig<Schema>,
-    G extends keyof C['gsis']
-> = C['gsis'][G] extends Gsi<Schema>
-    ? GsiKeysToObj<Static<C['gsis'][G]['schema']> extends object ? Merge<Static<C['gsis'][G]['schema']>> : never, C['gsis'][G]['keys']>
+// tuple representing the primary hash and (optional) range key
+export type PrimaryKeys<S extends TSchema> = Readonly<[ValidPrimaryKeys<S>, ValidPrimaryKeys<S>?]> extends Readonly<[string, string?]>
+    ? Readonly<[ValidPrimaryKeys<S>, ValidPrimaryKeys<S>?]>
     : never;
 
-export type ScanOptions = Omit<Dynamon.Scan, 'tableName'> & { log?: boolean };
-export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & { log?: boolean };
-export type QueryOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec'> & { log?: boolean };
-export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'> & { log?: boolean };
-export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'> & { log?: boolean };
-export type UpdateData<Schema extends TSchema, C extends DdbRepositoryConfig<Schema>> =
+// literal union of keys in the S that are eligible to be GSI hash/range keys
+export type ValidGsiKeys<S extends TSchema, T = Static<S>> = T extends object
+    ? {
+          [K in keyof Merge<T>]-?: T[K] extends string | number ? K : never;
+      }[keyof T]
+    : never;
+
+// tuple representing the primary hash and (optional) range key
+export type GsiKeys<S extends TSchema> = Readonly<[ValidGsiKeys<S>, ValidGsiKeys<S>?]> extends Readonly<[string, string?]>
+    ? Readonly<[ValidGsiKeys<S>, ValidGsiKeys<S>?]>
+    : never;
+
+// utility to build object of primary/GSI hash/range key(s) and their values
+export type KeysToObj<S extends TSchema, K extends PrimaryKeys<S> | GsiKeys<S>, IncludeRangeKey extends boolean> = {
+    [k in NonNullable<K[IncludeRangeKey extends true ? number : 0]>]: Static<S>[k];
+};
+
+// captures changes to input based on transformer function
+export type InputTransformer<S extends TSchema, I = Static<S>> = (input: I) => Static<S>;
+export type Input<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['transformInput'] extends InputTransformer<S>
+    ? Parameters<C['transformInput']>[0]
+    : Static<S>;
+
+// captures changes to output based on transformer function
+export type OutputTransformer<S extends TSchema, O = Static<S>> = (output: Static<S>) => O;
+export type Output<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['transformOutput'] extends OutputTransformer<S>
+    ? ReturnType<C['transformOutput']>
+    : Static<S>;
+export type GsiOutput<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
+    ? C['gsis'][G]['schema'] extends TSchema
+        ? Static<C['gsis'][G]['schema']>
+        : Output<S, C>
+    : never;
+
+// GSI index names
+export type GsiNames<S extends TSchema, C extends DdbRepositoryConfig<S>> = keyof C['gsis'];
+
+// GSI configuration
+export interface Gsi<S extends TSchema = TSchema> {
+    schema?: S;
+    keys: GsiKeys<S>;
+}
+
+// logger function
+export type DdbRepositoryLogger<S extends TSchema> = (log: DdbRepositoryLog<S>) => void;
+
+// main configuration type
+export interface DdbRepositoryConfig<S extends TSchema = TSchema, I = Static<S>, O = Static<S>> {
+    client?: DynamoDBClient;
+    tableName?: string;
+    validate?: boolean;
+    keys: PrimaryKeys<S>;
+    transformInput?: InputTransformer<S, I>;
+    transformOutput?: OutputTransformer<S, O>;
+    gsis?: Record<string, Gsi<S>>;
+    logger?: DdbRepositoryLogger<S>;
+}
+
+// subset of configuration type that can be configured at runtime via constructor
+export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate' | 'logger'>;
+
+/* Operation Types -------------------------------------------------------------------------------------------------------------- */
+
+export type OperationOptions = { log?: boolean };
+
+export type ScanOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName'> & OperationOptions;
+
+export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = KeysToObj<S, C['keys'], true>;
+export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
+
+export type QueryKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = KeysToObj<S, C['keys'], false>;
+export type QueryOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec' | 'indexName'> & OperationOptions;
+
+export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'> & OperationOptions;
+
+export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'> & OperationOptions;
+
+export type UpdateKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = KeysToObj<S, C['keys'], true>;
+export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> =
     | ExpressionSpec
-    | Partial<Omit<Static<Schema>, NonNullable<C['keys'][number]>>>;
-export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & { log?: boolean };
-export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & { log?: boolean };
+    | Partial<Omit<Static<S>, NonNullable<C['keys'][number]>>>;
+export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & OperationOptions;
+
+export type DeleteKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = KeysToObj<S, C['keys'], true>;
+export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & OperationOptions;
+
+export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
+    ? KeysToObj<S, C['gsis'][G]['keys'], false> & Partial<KeysToObj<S, C['gsis'][G]['keys'], true>>
+    : never;
+export type QueryGsiOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec' | 'indexName'> & OperationOptions;
+
+/* Logger Types ----------------------------------------------------------------------------------------------------------------- */
 
 export interface DdbRepositoryLogBase {
     time: number;
     duration: number;
 }
 
-export interface DdbRepositoryGetLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryGetLog<S extends TSchema> extends DdbRepositoryLogBase {
     operation: 'GET';
-    item?: Static<Schema>;
+    item?: Static<S>;
 }
 
 export interface DdbRepositoryScanLog extends DdbRepositoryLogBase {
     operation: 'SCAN';
     itemCount: number;
-    gsi?: string;
+    indexName?: string;
 }
 
 export interface DdbRepositoryQueryLog extends DdbRepositoryLogBase {
     operation: 'QUERY';
     itemCount: number;
-    gsi?: string;
+    indexName?: string;
 }
 
-export interface DdbRepositoryPutLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryPutLog<S extends TSchema> extends DdbRepositoryLogBase {
     operation: 'PUT';
-    item: Static<Schema>;
-    prevItem?: Static<Schema>;
+    item: Static<S>;
+    prevItem?: Static<S>;
 }
 
-export interface DdbRepositoryDeleteLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryDeleteLog<S extends TSchema> extends DdbRepositoryLogBase {
     operation: 'DELETE';
     item?: undefined;
-    prevItem?: Static<Schema>;
+    prevItem?: Static<S>;
 }
 
-export interface DdbRepositoryUpdateLog<Schema extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryUpdateLog<S extends TSchema> extends DdbRepositoryLogBase {
     operation: 'UPDATE';
-    item: Static<Schema>;
-    prevItem?: Static<Schema>;
+    item: Static<S>;
+    prevItem?: Static<S>;
 }
 
-export type DdbRepositoryLog<Schema extends TSchema> =
+export type DdbRepositoryLog<S extends TSchema> =
     | DdbRepositoryScanLog
     | DdbRepositoryQueryLog
-    | DdbRepositoryGetLog<Schema>
-    | DdbRepositoryPutLog<Schema>
-    | DdbRepositoryDeleteLog<Schema>
-    | DdbRepositoryUpdateLog<Schema>;
-
-export type DdbRepositoryLogger<Schema extends TSchema> = (log: DdbRepositoryLog<Schema>) => void;
-
-export interface DdbRepositoryConfig<Schema extends TSchema = TSchema, I = Static<Schema>, O = Static<Schema>> {
-    client?: DynamoDBClient;
-    tableName?: string;
-    validate?: boolean;
-    keys: Keys<Schema>;
-    transformInput?: InputTransformer<Schema, I>;
-    transformOutput?: OutputTransformer<Schema, O>;
-    gsis?: Record<string, Gsi<Schema>>;
-    logger?: DdbRepositoryLogger<Schema>;
-}
-
-export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate' | 'logger'>;
+    | DdbRepositoryGetLog<S>
+    | DdbRepositoryPutLog<S>
+    | DdbRepositoryDeleteLog<S>
+    | DdbRepositoryUpdateLog<S>;

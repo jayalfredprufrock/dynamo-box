@@ -10,7 +10,7 @@ npm i dynamo-box @sinclair/typebox @typemon/dynamon
 
 ### Todo
 
--   scanGsi method
+-   transformer support projected GSIs
 -   logging for batch operations
 -   output transforms for batch write
 -   transact write/get items support

@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { Static, TSchema } from '@sinclair/typebox';
+import { Static, TSchema, Type } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
 import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
@@ -8,33 +8,38 @@ import {
     DdbRepositoryConfig,
     DdbRepositoryLogger,
     DdbRepositoryRuntimeConfig,
+    DeleteKeysObj,
     DeleteOptions,
+    DistOmit,
+    GetKeysObj,
     GetOptions,
-    GsiKeys,
-    GsiKeysObj,
+    GsiNames,
+    GsiOutput,
     Input,
-    KeysObj,
     Output,
-    PrimaryKeyObj,
     PutOptions,
+    QueryGsiKeysObj,
+    QueryGsiOptions,
+    QueryKeysObj,
     QueryOptions,
     ScanOptions,
     UpdateData,
+    UpdateKeysObj,
     UpdateOptions,
 } from './types.js';
 import { hrTimeToMs, removeUndefined } from './util.js';
 
 export const makeDdbRepository =
-    <Schema extends TSchema>(schema: Schema) =>
-    <C extends DdbRepositoryConfig<Schema>>(config: C) => {
+    <S extends TSchema>(schema: S) =>
+    <C extends DdbRepositoryConfig<S>>(config: C) => {
         abstract class DdbRepository {
-            readonly schema: Schema = schema;
+            readonly schema: S = schema;
             readonly client: DynamoDBClient;
             readonly db: Dynamon;
             readonly tableName: string;
             readonly validate: boolean;
 
-            readonly logger?: DdbRepositoryLogger<Schema>;
+            readonly logger?: DdbRepositoryLogger<S>;
 
             constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
                 const client = runtimeConfig?.client ?? config.client;
@@ -54,7 +59,33 @@ export const makeDdbRepository =
                 this.logger = runtimeConfig?.logger ?? config?.logger;
             }
 
-            async get(keys: KeysObj<Schema, C>, options?: GetOptions): Promise<Output<Schema, C> | undefined> {
+            async scan(options?: ScanOptions): Promise<Output<S, C>[]> {
+                const time = Date.now();
+                const start = process.hrtime();
+
+                const items = await this.db.scanAll({
+                    tableName: this.tableName,
+                    ...options,
+                });
+
+                let itemsOutput = items as Output<S, C>[];
+                if (config.transformOutput) {
+                    itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
+                }
+
+                if (options?.log !== false) {
+                    this.logger?.({
+                        operation: 'SCAN',
+                        time,
+                        duration: hrTimeToMs(start),
+                        itemCount: items.length,
+                    });
+                }
+
+                return itemsOutput;
+            }
+
+            async get(keys: GetKeysObj<S, C>, options?: GetOptions): Promise<Output<S, C> | undefined> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -78,33 +109,7 @@ export const makeDdbRepository =
                 return output;
             }
 
-            async scan(options?: ScanOptions): Promise<Output<Schema, C>[]> {
-                const time = Date.now();
-                const start = process.hrtime();
-
-                const items = await this.db.scanAll({
-                    tableName: this.tableName,
-                    ...options,
-                });
-
-                let itemsOutput = items as Output<Schema, C>[];
-                if (config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as Output<Schema, C>[];
-                }
-
-                if (options?.log !== false) {
-                    this.logger?.({
-                        operation: 'SCAN',
-                        time,
-                        duration: hrTimeToMs(start),
-                        itemCount: items.length,
-                    });
-                }
-
-                return itemsOutput;
-            }
-
-            async query(key: PrimaryKeyObj<Schema, C>, options?: QueryOptions): Promise<Output<Schema, C>[]> {
+            async query(key: QueryKeysObj<S, C>, options?: QueryOptions): Promise<Output<S, C>[]> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -114,9 +119,9 @@ export const makeDdbRepository =
                     ...options,
                 });
 
-                let itemsOutput = items as Output<Schema, C>[];
+                let itemsOutput = items as Output<S, C>[];
                 if (config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as Output<Schema, C>[];
+                    itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
                 }
 
                 if (options?.log !== false) {
@@ -131,47 +136,7 @@ export const makeDdbRepository =
                 return itemsOutput;
             }
 
-            async queryGsi<G extends GsiKeys<Schema, C>>(
-                name: G,
-                keys: GsiKeysObj<Schema, C, G>,
-                options?: QueryOptions
-            ): Promise<Output<Schema, C>[]> {
-                const time = Date.now();
-                const start = process.hrtime();
-
-                const gsi = config.gsis?.[String(name)];
-                if (!gsi) {
-                    throw new Error(`Unrecognized GSI "${String(name)}"`);
-                }
-
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const keyConditionExpressionSpec = and(...Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k])));
-
-                const items = await this.db.queryAll({
-                    tableName: this.tableName,
-                    keyConditionExpressionSpec,
-                    ...options,
-                });
-
-                let itemsOutput = items as Output<Schema, C>[];
-                if (config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as Output<Schema, C>[];
-                }
-
-                if (options?.log !== false) {
-                    this.logger?.({
-                        operation: 'QUERY',
-                        time,
-                        duration: hrTimeToMs(start),
-                        itemCount: items.length,
-                        gsi: name as string,
-                    });
-                }
-
-                return itemsOutput;
-            }
-
-            async create(data: Input<Schema, C>, options?: CreateOptions): Promise<Output<Schema, C>> {
+            async create(data: Input<S, C>, options?: CreateOptions): Promise<Output<S, C>> {
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
                 const conditionExpressionSpec = and(
                     ...config.keys.filter((key): key is string => !!key).map(key => attributeNotExists(key))
@@ -179,7 +144,7 @@ export const makeDdbRepository =
                 return this.put(item, { ...options, conditionExpressionSpec });
             }
 
-            async put(data: Input<Schema, C>, options?: PutOptions): Promise<Output<Schema, C>> {
+            async put(data: Input<S, C>, options?: PutOptions): Promise<Output<S, C>> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -207,11 +172,7 @@ export const makeDdbRepository =
                 return output;
             }
 
-            async update(
-                keys: KeysObj<Schema, C>,
-                dataOrExpression: UpdateData<Schema, C>,
-                options?: UpdateOptions
-            ): Promise<Output<Schema, C>> {
+            async update(keys: UpdateKeysObj<S, C>, dataOrExpression: UpdateData<S, C>, options?: UpdateOptions): Promise<Output<S, C>> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -242,7 +203,7 @@ export const makeDdbRepository =
                 return output;
             }
 
-            async delete(keys: KeysObj<Schema, C>, options?: DeleteOptions): Promise<Output<Schema, C> | undefined> {
+            async delete(keys: DeleteKeysObj<S, C>, options?: DeleteOptions): Promise<Output<S, C> | undefined> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -267,10 +228,81 @@ export const makeDdbRepository =
                 return prevOutput;
             }
 
+            async scanGsi<G extends GsiNames<S, C>>(gsiName: G, options?: ScanOptions): Promise<GsiOutput<S, C, G>[]> {
+                const time = Date.now();
+                const start = process.hrtime();
+
+                const items = await this.db.scanAll({
+                    tableName: this.tableName,
+                    indexName: gsiName as string,
+                    ...options,
+                });
+
+                let itemsOutput = items as GsiOutput<S, C, G>[];
+
+                if (!config.gsis?.[gsiName as string]?.schema && config.transformOutput) {
+                    itemsOutput = items.map(config.transformOutput) as GsiOutput<S, C, G>[];
+                }
+
+                if (options?.log !== false) {
+                    this.logger?.({
+                        operation: 'SCAN',
+                        time,
+                        duration: hrTimeToMs(start),
+                        itemCount: items.length,
+                        indexName: gsiName as string,
+                    });
+                }
+
+                return itemsOutput;
+            }
+
+            async queryGsi<G extends GsiNames<S, C>>(
+                gsiName: G,
+                keys: QueryGsiKeysObj<S, C, G>,
+                options?: QueryGsiOptions
+            ): Promise<GsiOutput<S, C, G>[]> {
+                const time = Date.now();
+                const start = process.hrtime();
+
+                const gsi = config.gsis?.[String(gsiName)];
+                if (!gsi) {
+                    throw new Error(`Unrecognized GSI "${String(gsiName)}"`);
+                }
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const keyConditionExpressionSpec = and(...Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k])));
+
+                const items = await this.db.queryAll({
+                    tableName: this.tableName,
+                    indexName: gsiName as string,
+                    keyConditionExpressionSpec,
+                    ...options,
+                });
+
+                let itemsOutput = items as GsiOutput<S, C, G>[];
+
+                if (!config.gsis?.[gsiName as string]?.schema && config.transformOutput) {
+                    itemsOutput = items.map(config.transformOutput) as GsiOutput<S, C, G>[];
+                }
+
+                if (options?.log !== false) {
+                    this.logger?.({
+                        operation: 'QUERY',
+                        time,
+                        duration: hrTimeToMs(start),
+                        itemCount: items.length,
+                        indexName: gsiName as string,
+                    });
+                }
+
+                return itemsOutput;
+            }
+
             async batchGet(
-                batchKeys: KeysObj<Schema, C>[],
+                batchKeys: GetKeysObj<S, C>[],
                 options?: Omit<Dynamon.BatchGet.Operation, 'primaryKeys'>
-            ): Promise<{ responses: Static<Schema>[]; unprocessed: KeysObj<Schema, C>[] | undefined }> {
+            ): Promise<{ responses: Static<S>[]; unprocessed: GetKeysObj<S, C>[] | undefined }> {
                 const { responses, unprocessed } = await this.db.batchGet({
                     [this.tableName]: {
                         primaryKeys: batchKeys,
@@ -279,14 +311,14 @@ export const makeDdbRepository =
                 });
 
                 return {
-                    responses: (responses[this.tableName] as Static<Schema>[] | undefined) ?? [],
-                    unprocessed: unprocessed?.[this.tableName]?.primaryKeys as KeysObj<Schema, C>[] | undefined,
+                    responses: (responses[this.tableName] as Static<S>[] | undefined) ?? [],
+                    unprocessed: unprocessed?.[this.tableName]?.primaryKeys as GetKeysObj<S, C>[] | undefined,
                 };
             }
 
             async batchWrite(
-                batchOps: ({ type: 'Delete'; primaryKey: KeysObj<Schema, C> } | { type: 'Put'; item: Input<Schema, C> })[]
-            ): Promise<((KeysObj<Schema, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<Schema, C> })[] | undefined> {
+                batchOps: ({ type: 'Delete'; primaryKey: DeleteKeysObj<S, C> } | { type: 'Put'; item: Input<S, C> })[]
+            ): Promise<((DeleteKeysObj<S, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<S, C> })[] | undefined> {
                 const response = await this.db.batchWrite({
                     [this.tableName]: batchOps.map(op => {
                         if (op.type === 'Put') {
@@ -302,48 +334,44 @@ export const makeDdbRepository =
                 if (!response || !response[this.tableName]?.length) return;
 
                 return response[this.tableName] as
-                    | ((KeysObj<Schema, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<Schema, C> })[]
+                    | ((DeleteKeysObj<S, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<S, C> })[]
                     | undefined;
             }
 
-            async batchDelete(batchKeys: KeysObj<Schema, C>[]): Promise<KeysObj<Schema, C>[] | undefined> {
+            async batchDelete(batchKeys: DeleteKeysObj<S, C>[]): Promise<DeleteKeysObj<S, C>[] | undefined> {
                 const response = await this.batchWrite(batchKeys.map(primaryKey => ({ type: 'Delete', primaryKey })));
                 if (!response || !response.length) return;
 
-                return response.map(op => (op as Dynamon.BatchWrite.Delete).primaryKey) as KeysObj<Schema, C>[];
+                return response.map(op => (op as Dynamon.BatchWrite.Delete).primaryKey) as DeleteKeysObj<S, C>[];
             }
 
-            async batchPut(batchItems: Input<Schema, C>[]): Promise<Input<Schema, C>[] | undefined> {
+            async batchPut(batchItems: Input<S, C>[]): Promise<Input<S, C>[] | undefined> {
                 const response = await this.batchWrite(batchItems.map(item => ({ type: 'Put', item })));
                 if (!response || !response.length) return;
 
-                return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input<Schema, C>[];
+                return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input<S, C>[];
             }
         }
 
         return DdbRepository;
     };
 
-/*
-const JobSchema = Type.Object({ id: Type.String(), name: Type.String() });
+const JobSchema = Type.Object({ id: Type.String(), name: Type.String(), createdAt: Type.Number() });
 type Job = Static<typeof JobSchema>;
 export class JobRepository extends makeDdbRepository(JobSchema)({
     keys: ['id'],
-    transformInput: (input: DistOmit<Job, 'id'>): Job => ({
+    transformInput: (input: DistOmit<Job, 'id' | 'createdAt'>): Job => ({
         id: `J123`,
+        createdAt: Date.now(),
         ...input,
     }),
-    transformOutput: (output: Job) => {
-        return {
-            ...output,
-            now: Date.now(),
-        };
-    },
     gsis: {
-        byNAme: {
+        byName: {
             schema: JobSchema,
-            keys: ['name'],
+            keys: ['name', 'createdAt'],
         },
     },
 }) {}
-*/
+
+const repo = new JobRepository();
+repo.queryGsi('byName', { name: '123' });
