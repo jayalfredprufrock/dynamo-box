@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { Static, TSchema, Type } from '@sinclair/typebox';
+import { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
 import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
@@ -10,7 +10,6 @@ import {
     DdbRepositoryRuntimeConfig,
     DeleteKeysObj,
     DeleteOptions,
-    DistOmit,
     GetKeysObj,
     GetOptions,
     GsiNames,
@@ -115,7 +114,7 @@ export const makeDdbRepository =
 
                 const items = await this.db.queryAll({
                     tableName: this.tableName,
-                    keyConditionExpressionSpec: equal(config.keys[0], key[config.keys[0]]),
+                    keyConditionExpressionSpec: equal(config.partitionKey, key[config.partitionKey]),
                     ...options,
                 });
 
@@ -138,9 +137,7 @@ export const makeDdbRepository =
 
             async create(data: Input<S, C>, options?: CreateOptions): Promise<Output<S, C>> {
                 const item = removeUndefined(config.transformInput?.(data) ?? data);
-                const conditionExpressionSpec = and(
-                    ...config.keys.filter((key): key is string => !!key).map(key => attributeNotExists(key))
-                );
+                const conditionExpressionSpec = attributeNotExists(config.partitionKey);
                 return this.put(item, { ...options, conditionExpressionSpec });
             }
 
@@ -228,19 +225,24 @@ export const makeDdbRepository =
                 return prevOutput;
             }
 
-            async scanGsi<G extends GsiNames<S, C>>(gsiName: G, options?: ScanOptions): Promise<GsiOutput<S, C, G>[]> {
+            async scanGsi<G extends GsiNames<S, C>>(indexName: G, options?: ScanOptions): Promise<GsiOutput<S, C, G>[]> {
                 const time = Date.now();
                 const start = process.hrtime();
 
+                const gsi = config.gsis?.[indexName];
+                if (!gsi) {
+                    throw new Error(`Unrecognized GSI "${indexName}"`);
+                }
+
                 const items = await this.db.scanAll({
                     tableName: this.tableName,
-                    indexName: gsiName as string,
+                    indexName,
                     ...options,
                 });
 
                 let itemsOutput = items as GsiOutput<S, C, G>[];
 
-                if (!config.gsis?.[gsiName as string]?.schema && config.transformOutput) {
+                if ((gsi.projection === 'ALL' || !gsi?.projection) && config.transformOutput) {
                     itemsOutput = items.map(config.transformOutput) as GsiOutput<S, C, G>[];
                 }
 
@@ -248,9 +250,9 @@ export const makeDdbRepository =
                     this.logger?.({
                         operation: 'SCAN',
                         time,
+                        indexName,
                         duration: hrTimeToMs(start),
                         itemCount: items.length,
-                        indexName: gsiName as string,
                     });
                 }
 
@@ -258,16 +260,16 @@ export const makeDdbRepository =
             }
 
             async queryGsi<G extends GsiNames<S, C>>(
-                gsiName: G,
+                indexName: G,
                 keys: QueryGsiKeysObj<S, C, G>,
                 options?: QueryGsiOptions
             ): Promise<GsiOutput<S, C, G>[]> {
                 const time = Date.now();
                 const start = process.hrtime();
 
-                const gsi = config.gsis?.[String(gsiName)];
+                const gsi = config.gsis?.[indexName];
                 if (!gsi) {
-                    throw new Error(`Unrecognized GSI "${String(gsiName)}"`);
+                    throw new Error(`Unrecognized GSI "${indexName}"`);
                 }
 
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -275,14 +277,14 @@ export const makeDdbRepository =
 
                 const items = await this.db.queryAll({
                     tableName: this.tableName,
-                    indexName: gsiName as string,
+                    indexName,
                     keyConditionExpressionSpec,
                     ...options,
                 });
 
                 let itemsOutput = items as GsiOutput<S, C, G>[];
 
-                if (!config.gsis?.[gsiName as string]?.schema && config.transformOutput) {
+                if ((gsi.projection === 'ALL' || !gsi?.projection) && config.transformOutput) {
                     itemsOutput = items.map(config.transformOutput) as GsiOutput<S, C, G>[];
                 }
 
@@ -290,9 +292,9 @@ export const makeDdbRepository =
                     this.logger?.({
                         operation: 'QUERY',
                         time,
+                        indexName,
                         duration: hrTimeToMs(start),
                         itemCount: items.length,
-                        indexName: gsiName as string,
                     });
                 }
 
@@ -356,22 +358,50 @@ export const makeDdbRepository =
         return DdbRepository;
     };
 
-const JobSchema = Type.Object({ id: Type.String(), name: Type.String(), createdAt: Type.Number() });
+/*
+const JobSchema = Type.Union([
+    Type.Object({
+        id: Type.String(),
+        type: Type.Literal('RECURRING'),
+        name: Type.String(),
+        recurringId: Type.String(),
+        description: Type.Optional(Type.String()),
+        createdAt: Type.Number(),
+        updatedAt: Type.Number(),
+    }),
+    Type.Object({
+        id: Type.String(),
+        type: Type.Literal('ONESHOT'),
+        name: Type.String(),
+        description: Type.Optional(Type.String()),
+        createdAt: Type.Number(),
+        updatedAt: Type.Number(),
+    }),
+]);
+
 type Job = Static<typeof JobSchema>;
 export class JobRepository extends makeDdbRepository(JobSchema)({
-    keys: ['id'],
-    transformInput: (input: DistOmit<Job, 'id' | 'createdAt'>): Job => ({
+    partitionKey: 'id',
+    sortKey: 'createdAt',
+    transformInput: (input: DistOmit<Job, 'id' | 'updatedAt' | 'createdAt'>): Job => ({
         id: `J123`,
         createdAt: Date.now(),
         ...input,
+        updatedAt: Date.now(),
+    }),
+    transformOutput: (output: Job) => ({
+        ...output,
+        extraField: 3,
     }),
     gsis: {
         byName: {
-            schema: JobSchema,
-            keys: ['name', 'createdAt'],
+            partitionKey: 'name',
+            sortKey: 'updatedAt',
+            projection: ['description'],
         },
     },
 }) {}
 
 const repo = new JobRepository();
-repo.queryGsi('byName', { name: '123' });
+const test = await repo.queryGsi('byName', { name: 'ONESHOT' });
+*/
