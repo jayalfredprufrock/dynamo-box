@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.3.1
+
+### Patch Changes
+
+-   05e3bfe: more typing improvements
+
 ## 0.3.0
 
 ### Minor Changes
