@@ -14,6 +14,7 @@ export type PickTypeOf<T, K extends string | number | symbol> = K extends AllKey
 export type FlattenType<T> = { [KeyType in keyof T]: T[KeyType] } & {};
 export type PartialSome<T, K extends keyof T> = FlattenType<Omit<T, K> & Partial<Pick<T, K>>>;
 export type RequiredSome<T, K extends keyof T> = FlattenType<Required<Pick<T, K>> & Omit<T, K>>;
+export type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
 export type Merge<T extends object> = {
     [k in CommonKeys<T>]: PickTypeOf<T, k>;
 } & {
@@ -50,7 +51,7 @@ export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extend
 // captures changes to input based on transformer function
 export type InputTransformer<S extends TSchema, I = Static<S>> = (input: I) => Static<S>;
 export type Input<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['transformInput'] extends InputTransformer<S>
-    ? Parameters<C['transformInput']>[0]
+    ? DistPartialSome<Static<S>, Subtract<RequiredKeys<Static<S>>, RequiredKeys<Parameters<C['transformInput']>[0]>>>
     : Static<S>;
 
 // captures changes to output based on transformer function
@@ -144,6 +145,25 @@ export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>,
     : never;
 export type QueryGsiOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec' | 'indexName'> & OperationOptions;
 
+export type BatchGetOptions = Omit<Dynamon.BatchGet.Operation, 'primaryKeys'> & OperationOptions;
+export type BatchGetOutput<S extends TSchema, C extends DdbRepositoryConfig<S>> = {
+    items: Output<S, C>[];
+    unprocessed: GetKeysObj<S, C>[] | undefined;
+};
+
+export type BatchWriteOps<S extends TSchema, C extends DdbRepositoryConfig<S>> = (
+    | { type: 'Delete'; keys: DeleteKeysObj<S, C> }
+    | { type: 'Put'; item: Input<S, C> }
+)[];
+export type BatchWriteOptions = OperationOptions;
+export type BatchWriteOutput<S extends TSchema, C extends DdbRepositoryConfig<S>> =
+    | ((DeleteKeysObj<S, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<S, C> })[]
+    | undefined;
+
+export type BatchPutOptions = OperationOptions;
+
+export type BatchDeleteOptions = OperationOptions;
+
 /* Logger Types ----------------------------------------------------------------------------------------------------------------- */
 
 export interface DdbRepositoryLogBase {
@@ -186,10 +206,22 @@ export interface DdbRepositoryUpdateLog<S extends TSchema> extends DdbRepository
     prevItem?: Static<S>;
 }
 
+export interface DdbRepositoryBatchGetLog extends DdbRepositoryLogBase {
+    operation: 'BATCH_GET';
+    unprocessedCount: number;
+}
+
+export interface DdbRepositoryBatchWriteLog extends DdbRepositoryLogBase {
+    operation: 'BATCH_WRITE';
+    unprocessedCount: number;
+}
+
 export type DdbRepositoryLog<S extends TSchema> =
     | DdbRepositoryScanLog
     | DdbRepositoryQueryLog
     | DdbRepositoryGetLog<S>
     | DdbRepositoryPutLog<S>
     | DdbRepositoryDeleteLog<S>
-    | DdbRepositoryUpdateLog<S>;
+    | DdbRepositoryUpdateLog<S>
+    | DdbRepositoryBatchGetLog
+    | DdbRepositoryBatchWriteLog;

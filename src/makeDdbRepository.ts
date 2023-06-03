@@ -4,6 +4,13 @@ import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/d
 import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
 import {
+    BatchDeleteOptions,
+    BatchGetOptions,
+    BatchGetOutput,
+    BatchPutOptions,
+    BatchWriteOps,
+    BatchWriteOptions,
+    BatchWriteOutput,
     CreateOptions,
     DdbRepositoryConfig,
     DdbRepositoryLogger,
@@ -58,6 +65,16 @@ export const makeDdbRepository =
                 this.logger = runtimeConfig?.logger ?? config?.logger;
             }
 
+            // since typescript doesn't always catch "extra" properties on an object
+            // type depending on the context, this utility function can be used to
+            // make sure all other properties get stripped
+            getPrimaryKey(keys: GetKeysObj<S, C>): GetKeysObj<S, C> {
+                if (!config.sortKey) {
+                    return { [config.partitionKey]: keys[config.partitionKey] } as GetKeysObj<S, C>;
+                }
+                return { [config.partitionKey]: keys[config.partitionKey], [config.sortKey]: keys[config.sortKey] } as GetKeysObj<S, C>;
+            }
+
             async scan(options?: ScanOptions): Promise<Output<S, C>[]> {
                 const time = Date.now();
                 const start = process.hrtime();
@@ -90,7 +107,7 @@ export const makeDdbRepository =
 
                 const item = await this.db.get({
                     tableName: this.tableName,
-                    primaryKey: keys,
+                    primaryKey: this.getPrimaryKey(keys),
                     ...options,
                 });
 
@@ -180,7 +197,7 @@ export const makeDdbRepository =
 
                 const item = await this.db.update({
                     tableName: this.tableName,
-                    primaryKey: keys,
+                    primaryKey: this.getPrimaryKey(keys),
                     returnValues: 'ALL_NEW',
                     updateExpressionSpec,
                     ...options,
@@ -207,7 +224,7 @@ export const makeDdbRepository =
                 const prevItem = await this.db.delete({
                     tableName: this.tableName,
                     returnValues: 'ALL_OLD',
-                    primaryKey: keys,
+                    primaryKey: this.getPrimaryKey(keys),
                     ...options,
                 });
 
@@ -301,26 +318,42 @@ export const makeDdbRepository =
                 return itemsOutput;
             }
 
-            async batchGet(
-                batchKeys: GetKeysObj<S, C>[],
-                options?: Omit<Dynamon.BatchGet.Operation, 'primaryKeys'>
-            ): Promise<{ responses: Static<S>[]; unprocessed: GetKeysObj<S, C>[] | undefined }> {
+            async batchGet(batchKeys: GetKeysObj<S, C>[], options?: BatchGetOptions): Promise<BatchGetOutput<S, C>> {
+                const time = Date.now();
+                const start = process.hrtime();
+
                 const { responses, unprocessed } = await this.db.batchGet({
                     [this.tableName]: {
-                        primaryKeys: batchKeys,
+                        primaryKeys: batchKeys.map(this.getPrimaryKey),
                         ...options,
                     },
                 });
 
+                const items = (responses[this.tableName] as Static<S>[] | undefined) ?? [];
+                let itemsOutput = items as Output<S, C>[];
+                if (config.transformOutput) {
+                    itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
+                }
+
+                if (options?.log !== false) {
+                    this.logger?.({
+                        operation: 'BATCH_GET',
+                        time,
+                        duration: hrTimeToMs(start),
+                        unprocessedCount: unprocessed?.[this.tableName]?.primaryKeys.length ?? 0,
+                    });
+                }
+
                 return {
-                    responses: (responses[this.tableName] as Static<S>[] | undefined) ?? [],
+                    items: itemsOutput,
                     unprocessed: unprocessed?.[this.tableName]?.primaryKeys as GetKeysObj<S, C>[] | undefined,
                 };
             }
 
-            async batchWrite(
-                batchOps: ({ type: 'Delete'; primaryKey: DeleteKeysObj<S, C> } | { type: 'Put'; item: Input<S, C> })[]
-            ): Promise<((DeleteKeysObj<S, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<S, C> })[] | undefined> {
+            async batchWrite(batchOps: BatchWriteOps<S, C>, options?: BatchWriteOptions): Promise<BatchWriteOutput<S, C>> {
+                const time = Date.now();
+                const start = process.hrtime();
+
                 const response = await this.db.batchWrite({
                     [this.tableName]: batchOps.map(op => {
                         if (op.type === 'Put') {
@@ -329,26 +362,44 @@ export const makeDdbRepository =
                                 item: removeUndefined(config.transformInput?.(op.item) ?? op.item),
                             };
                         }
-                        return op;
+                        return {
+                            type: 'Delete',
+                            primaryKey: this.getPrimaryKey(op.keys),
+                        };
                     }),
                 });
 
-                if (!response || !response[this.tableName]?.length) return;
+                const unprocessedCount = response?.[this.tableName]?.length ?? 0;
 
-                return response[this.tableName] as
-                    | ((DeleteKeysObj<S, C> & { type: 'Delete' }) | { type: 'Put'; item: Input<S, C> })[]
-                    | undefined;
+                if (options?.log !== false) {
+                    this.logger?.({
+                        operation: 'BATCH_WRITE',
+                        time,
+                        duration: hrTimeToMs(start),
+                        unprocessedCount,
+                    });
+                }
+
+                if (!unprocessedCount || !response) return;
+
+                return response[this.tableName] as BatchWriteOutput<S, C>;
             }
 
-            async batchDelete(batchKeys: DeleteKeysObj<S, C>[]): Promise<DeleteKeysObj<S, C>[] | undefined> {
-                const response = await this.batchWrite(batchKeys.map(primaryKey => ({ type: 'Delete', primaryKey })));
+            async batchDelete(batchKeys: DeleteKeysObj<S, C>[], options?: BatchDeleteOptions): Promise<DeleteKeysObj<S, C>[] | undefined> {
+                const response = await this.batchWrite(
+                    batchKeys.map(keys => ({ type: 'Delete', keys })),
+                    options
+                );
                 if (!response || !response.length) return;
 
                 return response.map(op => (op as Dynamon.BatchWrite.Delete).primaryKey) as DeleteKeysObj<S, C>[];
             }
 
-            async batchPut(batchItems: Input<S, C>[]): Promise<Input<S, C>[] | undefined> {
-                const response = await this.batchWrite(batchItems.map(item => ({ type: 'Put', item })));
+            async batchPut(batchItems: Input<S, C>[], options?: BatchPutOptions): Promise<Input<S, C>[] | undefined> {
+                const response = await this.batchWrite(
+                    batchItems.map(item => ({ type: 'Put', item })),
+                    options
+                );
                 if (!response || !response.length) return;
 
                 return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input<S, C>[];
@@ -403,5 +454,5 @@ export class JobRepository extends makeDdbRepository(JobSchema)({
 }) {}
 
 const repo = new JobRepository();
-const test = await repo.queryGsi('byName', { name: 'ONESHOT' });
+const test = await repo.put({ id: '123', type: 'RECURRING', name: 'asdf', recurringId: '123' });
 */
