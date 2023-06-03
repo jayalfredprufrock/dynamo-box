@@ -114,7 +114,7 @@ export type ScanOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName'> & Operat
 
 export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
     Static<S>,
-    NonNullable<C['partitionKey'] | C['sortKey']>
+    C['partitionKey'] | NonNullable<C['sortKey']>
 >;
 export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
 
@@ -127,21 +127,21 @@ export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'
 
 export type UpdateKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
     Static<S>,
-    NonNullable<C['partitionKey'] | C['sortKey']>
+    C['partitionKey'] | NonNullable<C['sortKey']>
 >;
 export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> =
     | ExpressionSpec
-    | Partial<Omit<Static<S>, NonNullable<C['partitionKey'] | C['sortKey']>>>;
+    | Partial<DistOmit<Static<S>, C['partitionKey'] | NonNullable<C['sortKey']>>>;
 export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & OperationOptions;
 
 export type DeleteKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
     Static<S>,
-    NonNullable<C['partitionKey'] | C['sortKey']>
+    C['partitionKey'] | NonNullable<C['sortKey']>
 >;
 export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & OperationOptions;
 
 export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
-    ? Required<Pick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<Pick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
+    ? Required<DistPick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<DistPick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
     : never;
 export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName'>, 'keyConditionExpressionSpec'> & OperationOptions;
 
