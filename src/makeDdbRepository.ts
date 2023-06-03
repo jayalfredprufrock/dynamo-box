@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
-import { isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
+import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 
 import {
     BatchDeleteOptions,
@@ -129,10 +129,17 @@ export const makeDdbRepository =
                 const time = Date.now();
                 const start = process.hrtime();
 
+                const conditions: ExpressionSpec[] = [equal(config.partitionKey, key[config.partitionKey])];
+
+                const { keyConditionExpressionSpec: rangeCondition, ...otherOptions } = options ?? {};
+                if (rangeCondition) {
+                    conditions.push(rangeCondition);
+                }
+
                 const items = await this.db.queryAll({
                     tableName: this.tableName,
-                    keyConditionExpressionSpec: equal(config.partitionKey, key[config.partitionKey]),
-                    ...options,
+                    keyConditionExpressionSpec: and(conditions),
+                    ...otherOptions,
                 });
 
                 let itemsOutput = items as Output<S, C>[];
@@ -290,13 +297,17 @@ export const makeDdbRepository =
                 }
 
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const keyConditionExpressionSpec = and(...Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k])));
+                const conditions: ExpressionSpec[] = Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k]));
+                const { keyConditionExpressionSpec: rangeCondition, ...otherOptions } = options ?? {};
+                if (rangeCondition) {
+                    conditions.push(rangeCondition);
+                }
 
                 const items = await this.db.queryAll({
                     tableName: this.tableName,
                     indexName,
-                    keyConditionExpressionSpec,
-                    ...options,
+                    keyConditionExpressionSpec: and(conditions),
+                    ...otherOptions,
                 });
 
                 let itemsOutput = items as GsiOutput<S, C, G>[];

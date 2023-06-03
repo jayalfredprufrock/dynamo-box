@@ -119,7 +119,7 @@ export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pi
 export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
 
 export type QueryKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, C['partitionKey']>;
-export type QueryOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec' | 'indexName'> & OperationOptions;
+export type QueryOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName'>, 'keyConditionExpressionSpec'> & OperationOptions;
 
 export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'item' | 'conditionExpressionSpec'> & OperationOptions;
 
@@ -143,7 +143,7 @@ export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 
 export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
     ? Required<Pick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<Pick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
     : never;
-export type QueryGsiOptions = Omit<Dynamon.Query, 'tableName' | 'keyConditionExpressionSpec' | 'indexName'> & OperationOptions;
+export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName'>, 'keyConditionExpressionSpec'> & OperationOptions;
 
 export type BatchGetOptions = Omit<Dynamon.BatchGet.Operation, 'primaryKeys'> & OperationOptions;
 export type BatchGetOutput<S extends TSchema, C extends DdbRepositoryConfig<S>> = {
