@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.4.2
+
+### Patch Changes
+
+-   267553e: Allow passing a range key condition to query operations
+
 ## 0.4.1
 
 ### Patch Changes
