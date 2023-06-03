@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.4.3
+
+### Patch Changes
+
+-   22d50a2: fix: key types in operations involving range keys
+
 ## 0.4.2
 
 ### Patch Changes
