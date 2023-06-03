@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.4.4
+
+### Patch Changes
+
+-   6fd9983: fix: bad typings when not using rangeKey
+
 ## 0.4.3
 
 ### Patch Changes
