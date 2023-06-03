@@ -38,6 +38,10 @@ export type ValidPrimaryKeys<S extends TSchema, E = never, T = Static<S>> = Excl
     E
 >;
 
+// grabs the names of the primary keys, handling optional sortKey
+export type PrimaryKeys<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['partitionKey'] &
+    (C['sortKey'] extends undefined ? unknown : C['sortKey']);
+
 // literal union of keys in the schema that are eligible to be GSI hash/range keys
 export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extends object
     ? Exclude<
@@ -46,6 +50,11 @@ export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extend
           }[keyof T],
           E
       >
+    : never;
+
+// grabs the names of the GSI keys, handling optional sortKey
+export type GsiKeys<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
+    ? C['gsis'][G]['partitionKey'] & (C['gsis'][G]['sortKey'] extends undefined ? unknown : C['gsis'][G]['sortKey'])
     : never;
 
 // captures changes to input based on transformer function
@@ -61,19 +70,9 @@ export type Output<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['tra
     : Static<S>;
 export type GsiOutput<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
     ? C['gsis'][G]['projection'] extends (keyof Static<S>)[]
-        ? Pick<
-              Static<S>,
-              | C['partitionKey']
-              | NonNullable<C['sortKey']>
-              | C['gsis'][G]['partitionKey']
-              | NonNullable<C['gsis'][G]['sortKey']>
-              | C['gsis'][G]['projection'][number]
-          >
+        ? Pick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G> | C['gsis'][G]['projection'][number]>
         : C['gsis'][G]['projection'] extends 'KEYS'
-        ? Pick<
-              Static<S>,
-              C['partitionKey'] | NonNullable<C['sortKey']> | C['gsis'][G]['partitionKey'] | NonNullable<C['gsis'][G]['sortKey']>
-          >
+        ? Pick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G>>
         : Output<S, C>
     : never;
 
@@ -112,10 +111,7 @@ export type OperationOptions = { log?: boolean };
 
 export type ScanOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName'> & OperationOptions;
 
-export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
-    Static<S>,
-    C['partitionKey'] | NonNullable<C['sortKey']>
->;
+export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
 export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
 
 export type QueryKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, C['partitionKey']>;
@@ -125,19 +121,11 @@ export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'it
 
 export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'> & OperationOptions;
 
-export type UpdateKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
-    Static<S>,
-    C['partitionKey'] | NonNullable<C['sortKey']>
->;
-export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> =
-    | ExpressionSpec
-    | Partial<DistOmit<Static<S>, C['partitionKey'] | NonNullable<C['sortKey']>>>;
+export type UpdateKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
+export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> = ExpressionSpec | Omit<Partial<Static<S>>, PrimaryKeys<S, C>>;
 export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & OperationOptions;
 
-export type DeleteKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<
-    Static<S>,
-    C['partitionKey'] | NonNullable<C['sortKey']>
->;
+export type DeleteKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
 export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 'primaryKey'> & OperationOptions;
 
 export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
