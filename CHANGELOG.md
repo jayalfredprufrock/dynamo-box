@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.5.0
+
+### Minor Changes
+
+-   1266782: feat: switch to event emitter based log approach
+
 ## 0.4.4
 
 ### Patch Changes
