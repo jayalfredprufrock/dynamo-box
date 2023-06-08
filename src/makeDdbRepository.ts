@@ -1,9 +1,8 @@
-import NodeEventEmitter from 'node:events';
-
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
 import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
+import { EventEmitter } from 'events';
 import TypedEventEmitter from 'typed-emitter';
 
 import {
@@ -39,22 +38,18 @@ import {
 } from './types.js';
 import { hrTimeToMs, removeUndefined } from './util.js';
 
-export const EventEmitter = NodeEventEmitter as unknown as {
-    new <S extends TSchema>(): TypedEventEmitter<DdbRepositoryEvents<S>> extends infer O ? { [K in keyof O]: O[K] } : never;
-};
-
 export const makeDdbRepository =
     <S extends TSchema>(schema: S) =>
     <C extends DdbRepositoryConfig<S>>(config: C) => {
-        abstract class DdbRepository extends EventEmitter<S> {
+        abstract class DdbRepository {
             readonly schema: S = schema;
             readonly client: DynamoDBClient;
             readonly db: Dynamon;
             readonly tableName: string;
             readonly validate: boolean;
+            readonly logger = new EventEmitter() as TypedEventEmitter<DdbRepositoryEvents<S>>;
 
             constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
-                super();
                 const client = runtimeConfig?.client ?? config.client;
                 if (!client) {
                     throw new Error('Client must be passed in "makeDdbRepository" config or within the constructor.');
@@ -91,7 +86,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'SCAN',
                         time,
                         duration: hrTimeToMs(start),
@@ -131,7 +126,7 @@ export const makeDdbRepository =
                 const output = item !== undefined ? config.transformOutput?.(item) ?? item : undefined;
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'GET',
                         time,
                         duration: hrTimeToMs(start),
@@ -165,7 +160,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'QUERY',
                         time,
                         duration: hrTimeToMs(start),
@@ -198,7 +193,7 @@ export const makeDdbRepository =
                 const output = config.transformOutput?.(item) ?? item;
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'PUT',
                         time,
                         duration: hrTimeToMs(start),
@@ -230,7 +225,7 @@ export const makeDdbRepository =
                 const output = config.transformOutput?.(item) ?? item;
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'UPDATE',
                         time,
                         duration: hrTimeToMs(start),
@@ -255,7 +250,7 @@ export const makeDdbRepository =
                 const prevOutput = prevItem !== undefined ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'DELETE',
                         time,
                         duration: hrTimeToMs(start),
@@ -288,7 +283,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'SCAN',
                         time,
                         indexName,
@@ -334,7 +329,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'QUERY',
                         time,
                         indexName,
@@ -364,7 +359,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'BATCH_GET',
                         time,
                         duration: hrTimeToMs(start),
@@ -400,7 +395,7 @@ export const makeDdbRepository =
                 const unprocessedCount = response?.[this.tableName]?.length ?? 0;
 
                 if (options?.log !== false) {
-                    this.emit('operation', {
+                    this.logger.emit('operation', {
                         operation: 'BATCH_WRITE',
                         time,
                         duration: hrTimeToMs(start),
@@ -436,51 +431,3 @@ export const makeDdbRepository =
 
         return DdbRepository;
     };
-
-/*
-const JobSchema = Type.Union([
-    Type.Object({
-        id: Type.String(),
-        type: Type.Literal('RECURRING'),
-        name: Type.String(),
-        recurringId: Type.String(),
-        description: Type.Optional(Type.String()),
-        createdAt: Type.Number(),
-        updatedAt: Type.Number(),
-    }),
-    Type.Object({
-        id: Type.String(),
-        type: Type.Literal('ONESHOT'),
-        name: Type.String(),
-        description: Type.Optional(Type.String()),
-        createdAt: Type.Number(),
-        updatedAt: Type.Number(),
-    }),
-]);
-
-type Job = Static<typeof JobSchema>;
-export class JobRepository extends makeDdbRepository(JobSchema)({
-    partitionKey: 'id',
-    sortKey: 'createdAt',
-    transformInput: (input: DistOmit<Job, 'id' | 'updatedAt' | 'createdAt'>): Job => ({
-        id: `J123`,
-        createdAt: Date.now(),
-        ...input,
-        updatedAt: Date.now(),
-    }),
-    transformOutput: (output: Job) => ({
-        ...output,
-        extraField: 3,
-    }),
-    gsis: {
-        byName: {
-            partitionKey: 'name',
-            sortKey: 'updatedAt',
-            projection: ['description'],
-        },
-    },
-}) {}
-
-const repo = new JobRepository();
-const test = await repo.put({ id: '123', type: 'RECURRING', name: 'asdf', recurringId: '123' });
-*/
