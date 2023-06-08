@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.6.0
+
+### Minor Changes
+
+-   853de0b: Store emitter as prop instead of extending EventEmitter directly
+
 ## 0.5.1
 
 ### Patch Changes
