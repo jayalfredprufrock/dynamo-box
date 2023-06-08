@@ -1,7 +1,10 @@
+import NodeEventEmitter from 'node:events';
+
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
 import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
+import TypedEventEmitter from 'typed-emitter';
 
 import {
     BatchDeleteOptions,
@@ -13,7 +16,7 @@ import {
     BatchWriteOutput,
     CreateOptions,
     DdbRepositoryConfig,
-    DdbRepositoryLogger,
+    DdbRepositoryEvents,
     DdbRepositoryRuntimeConfig,
     DeleteKeysObj,
     DeleteOptions,
@@ -28,6 +31,7 @@ import {
     QueryGsiOptions,
     QueryKeysObj,
     QueryOptions,
+    ScanGsiOptions,
     ScanOptions,
     UpdateData,
     UpdateKeysObj,
@@ -35,19 +39,22 @@ import {
 } from './types.js';
 import { hrTimeToMs, removeUndefined } from './util.js';
 
+const EventEmitter = NodeEventEmitter as unknown as {
+    new <S extends TSchema>(): TypedEventEmitter<DdbRepositoryEvents<S>> extends infer O ? { [K in keyof O]: O[K] } : never;
+};
+
 export const makeDdbRepository =
     <S extends TSchema>(schema: S) =>
     <C extends DdbRepositoryConfig<S>>(config: C) => {
-        abstract class DdbRepository {
+        abstract class DdbRepository extends EventEmitter<S> {
             readonly schema: S = schema;
             readonly client: DynamoDBClient;
             readonly db: Dynamon;
             readonly tableName: string;
             readonly validate: boolean;
 
-            readonly logger?: DdbRepositoryLogger<S>;
-
             constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
+                super();
                 const client = runtimeConfig?.client ?? config.client;
                 if (!client) {
                     throw new Error('Client must be passed in "makeDdbRepository" config or within the constructor.');
@@ -62,7 +69,6 @@ export const makeDdbRepository =
 
                 this.tableName = tableName;
                 this.validate = runtimeConfig?.validate ?? config?.validate ?? false;
-                this.logger = runtimeConfig?.logger ?? config?.logger;
             }
 
             // since typescript doesn't always catch "extra" properties on an object
@@ -79,26 +85,37 @@ export const makeDdbRepository =
                 const time = Date.now();
                 const start = process.hrtime();
 
-                const items = await this.db.scanAll({
-                    tableName: this.tableName,
-                    ...options,
-                });
-
-                let itemsOutput = items as Output<S, C>[];
-                if (config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
+                const itemsOutput: Output<S, C>[] = [];
+                for await (const items of this.scanPaged(options)) {
+                    itemsOutput.push(...items);
                 }
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'SCAN',
                         time,
                         duration: hrTimeToMs(start),
-                        itemCount: items.length,
+                        itemCount: itemsOutput.length,
                     });
                 }
 
                 return itemsOutput;
+            }
+
+            async *scanPaged(options?: ScanOptions): AsyncGenerator<Output<S, C>[]> {
+                const paginator = this.db.scan$({
+                    tableName: this.tableName,
+                    skipEmptyPage: true,
+                    ...options,
+                });
+
+                for await (const page of paginator) {
+                    let itemsOutput = page.items as Output<S, C>[];
+                    if (config.transformOutput) {
+                        itemsOutput = page.items.map(config.transformOutput) as Output<S, C>[];
+                    }
+                    yield itemsOutput;
+                }
             }
 
             async get(keys: GetKeysObj<S, C>, options?: GetOptions): Promise<Output<S, C> | undefined> {
@@ -114,7 +131,7 @@ export const makeDdbRepository =
                 const output = item !== undefined ? config.transformOutput?.(item) ?? item : undefined;
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'GET',
                         time,
                         duration: hrTimeToMs(start),
@@ -148,7 +165,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'QUERY',
                         time,
                         duration: hrTimeToMs(start),
@@ -181,7 +198,7 @@ export const makeDdbRepository =
                 const output = config.transformOutput?.(item) ?? item;
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'PUT',
                         time,
                         duration: hrTimeToMs(start),
@@ -213,7 +230,7 @@ export const makeDdbRepository =
                 const output = config.transformOutput?.(item) ?? item;
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'UPDATE',
                         time,
                         duration: hrTimeToMs(start),
@@ -238,7 +255,7 @@ export const makeDdbRepository =
                 const prevOutput = prevItem !== undefined ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'DELETE',
                         time,
                         duration: hrTimeToMs(start),
@@ -249,7 +266,7 @@ export const makeDdbRepository =
                 return prevOutput;
             }
 
-            async scanGsi<G extends GsiNames<S, C>>(indexName: G, options?: ScanOptions): Promise<GsiOutput<S, C, G>[]> {
+            async scanGsi<G extends GsiNames<S, C>>(indexName: G, options?: ScanGsiOptions): Promise<GsiOutput<S, C, G>[]> {
                 const time = Date.now();
                 const start = process.hrtime();
 
@@ -271,7 +288,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'SCAN',
                         time,
                         indexName,
@@ -317,7 +334,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'QUERY',
                         time,
                         indexName,
@@ -347,7 +364,7 @@ export const makeDdbRepository =
                 }
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'BATCH_GET',
                         time,
                         duration: hrTimeToMs(start),
@@ -383,7 +400,7 @@ export const makeDdbRepository =
                 const unprocessedCount = response?.[this.tableName]?.length ?? 0;
 
                 if (options?.log !== false) {
-                    this.logger?.({
+                    this.emit('operation', {
                         operation: 'BATCH_WRITE',
                         time,
                         duration: hrTimeToMs(start),

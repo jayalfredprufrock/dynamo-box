@@ -60,5 +60,8 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/jayalfredprufrock/dynamo-box"
+    },
+    "dependencies": {
+        "typed-emitter": "^2.1.0"
     }
 }

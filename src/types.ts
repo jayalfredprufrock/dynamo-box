@@ -86,9 +86,6 @@ export interface Gsi<S extends TSchema> {
     projection?: 'ALL' | 'KEYS' | AllKeys<Static<S>>[];
 }
 
-// logger function
-export type DdbRepositoryLogger<S extends TSchema> = (log: DdbRepositoryLog<S>) => void;
-
 // main configuration type
 export interface DdbRepositoryConfig<S extends TSchema = TSchema> {
     client?: DynamoDBClient;
@@ -99,17 +96,18 @@ export interface DdbRepositoryConfig<S extends TSchema = TSchema> {
     transformInput?: InputTransformer<S>;
     transformOutput?: OutputTransformer<S>;
     gsis?: Record<string, Gsi<S>>;
-    logger?: DdbRepositoryLogger<S>;
 }
 
 // subset of configuration type that can be configured at runtime via constructor
-export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate' | 'logger'>;
+export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate'>;
 
 /* Operation Types -------------------------------------------------------------------------------------------------------------- */
 
 export type OperationOptions = { log?: boolean };
 
 export type ScanOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName'> & OperationOptions;
+
+export type ScanGsiOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName' | 'consistentRead'> & OperationOptions;
 
 export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
 export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
@@ -131,7 +129,8 @@ export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 
 export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
     ? Required<DistPick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<DistPick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
     : never;
-export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName'>, 'keyConditionExpressionSpec'> & OperationOptions;
+export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName' | 'consistentRead'>, 'keyConditionExpressionSpec'> &
+    OperationOptions;
 
 export type BatchGetOptions = Omit<Dynamon.BatchGet.Operation, 'primaryKeys'> & OperationOptions;
 export type BatchGetOutput<S extends TSchema, C extends DdbRepositoryConfig<S>> = {
@@ -154,57 +153,57 @@ export type BatchDeleteOptions = OperationOptions;
 
 /* Logger Types ----------------------------------------------------------------------------------------------------------------- */
 
-export interface DdbRepositoryLogBase {
+export interface DdbRepositoryOpLogBase {
     time: number;
     duration: number;
 }
 
-export interface DdbRepositoryGetLog<S extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryGetLog<S extends TSchema> extends DdbRepositoryOpLogBase {
     operation: 'GET';
     item?: Static<S>;
 }
 
-export interface DdbRepositoryScanLog extends DdbRepositoryLogBase {
+export interface DdbRepositoryScanLog extends DdbRepositoryOpLogBase {
     operation: 'SCAN';
     itemCount: number;
     indexName?: string;
 }
 
-export interface DdbRepositoryQueryLog extends DdbRepositoryLogBase {
+export interface DdbRepositoryQueryLog extends DdbRepositoryOpLogBase {
     operation: 'QUERY';
     itemCount: number;
     indexName?: string;
 }
 
-export interface DdbRepositoryPutLog<S extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryPutLog<S extends TSchema> extends DdbRepositoryOpLogBase {
     operation: 'PUT';
     item: Static<S>;
     prevItem?: Static<S>;
 }
 
-export interface DdbRepositoryDeleteLog<S extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryDeleteLog<S extends TSchema> extends DdbRepositoryOpLogBase {
     operation: 'DELETE';
     item?: undefined;
     prevItem?: Static<S>;
 }
 
-export interface DdbRepositoryUpdateLog<S extends TSchema> extends DdbRepositoryLogBase {
+export interface DdbRepositoryUpdateLog<S extends TSchema> extends DdbRepositoryOpLogBase {
     operation: 'UPDATE';
     item: Static<S>;
     prevItem?: Static<S>;
 }
 
-export interface DdbRepositoryBatchGetLog extends DdbRepositoryLogBase {
+export interface DdbRepositoryBatchGetLog extends DdbRepositoryOpLogBase {
     operation: 'BATCH_GET';
     unprocessedCount: number;
 }
 
-export interface DdbRepositoryBatchWriteLog extends DdbRepositoryLogBase {
+export interface DdbRepositoryBatchWriteLog extends DdbRepositoryOpLogBase {
     operation: 'BATCH_WRITE';
     unprocessedCount: number;
 }
 
-export type DdbRepositoryLog<S extends TSchema> =
+export type DdbRepositoryOpLogEvent<S extends TSchema> =
     | DdbRepositoryScanLog
     | DdbRepositoryQueryLog
     | DdbRepositoryGetLog<S>
@@ -213,3 +212,7 @@ export type DdbRepositoryLog<S extends TSchema> =
     | DdbRepositoryUpdateLog<S>
     | DdbRepositoryBatchGetLog
     | DdbRepositoryBatchWriteLog;
+
+export type DdbRepositoryEvents<S extends TSchema> = {
+    operation: (op: DdbRepositoryOpLogEvent<S>) => void;
+};
