@@ -39,7 +39,7 @@ import {
 } from './types.js';
 import { hrTimeToMs, removeUndefined } from './util.js';
 
-const EventEmitter = NodeEventEmitter as unknown as {
+export const EventEmitter = NodeEventEmitter as unknown as {
     new <S extends TSchema>(): TypedEventEmitter<DdbRepositoryEvents<S>> extends infer O ? { [K in keyof O]: O[K] } : never;
 };
 
