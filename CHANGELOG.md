@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.5.1
+
+### Patch Changes
+
+-   c1fa095: export event emitter intermediate class
+
 ## 0.5.0
 
 ### Minor Changes
