@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.6.1
+
+### Patch Changes
+
+-   a52cae6: fix: correct GSI item types when using projections
+
 ## 0.6.0
 
 ### Minor Changes
