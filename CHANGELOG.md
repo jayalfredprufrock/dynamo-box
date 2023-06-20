@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.6.2
+
+### Patch Changes
+
+-   0cc4be7: update deps
+
 ## 0.6.1
 
 ### Patch Changes
