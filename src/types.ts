@@ -39,8 +39,9 @@ export type ValidPrimaryKeys<S extends TSchema, E = never, T = Static<S>> = Excl
 >;
 
 // grabs the names of the primary keys, handling optional sortKey
-export type PrimaryKeys<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['partitionKey'] &
-    (C['sortKey'] extends undefined ? unknown : C['sortKey']);
+export type PrimaryKeys<S extends TSchema, C extends DdbRepositoryConfig<S>> =
+    | C['partitionKey']
+    | (C['sortKey'] extends undefined ? never : NonNullable<C['sortKey']>);
 
 // literal union of keys in the schema that are eligible to be GSI hash/range keys
 export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extends object
@@ -54,7 +55,7 @@ export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extend
 
 // grabs the names of the GSI keys, handling optional sortKey
 export type GsiKeys<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
-    ? C['gsis'][G]['partitionKey'] & (C['gsis'][G]['sortKey'] extends undefined ? unknown : C['gsis'][G]['sortKey'])
+    ? C['gsis'][G]['partitionKey'] | (C['gsis'][G]['sortKey'] extends undefined ? never : NonNullable<C['gsis'][G]['sortKey']>)
     : never;
 
 // captures changes to input based on transformer function

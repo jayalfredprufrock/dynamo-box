@@ -211,8 +211,12 @@ export const makeDdbRepository =
 
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
-                    : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      update(...Object.keys(removeUndefined(dataOrExpression)).map(k => set(k, (dataOrExpression as any)[k])));
+                    : update(
+                          ...Object.keys(removeUndefined(dataOrExpression))
+                              .filter(k => k !== config.partitionKey && k !== config.sortKey)
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              .map(k => set(k, (dataOrExpression as any)[k]))
+                      );
 
                 const item = await this.db.update({
                     tableName: this.tableName,

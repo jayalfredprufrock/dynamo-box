@@ -19,3 +19,4 @@ npm i dynamo-box @sinclair/typebox @typemon/dynamon
     for safer typings and less reliance on dynamon.
 -   alternatively, provide strongly-typed "condition builder"
 -   ability to create tables (or definitions) based on config
+-   createOrUpdate() and make put() require _complete_ type object?
