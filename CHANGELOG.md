@@ -1,5 +1,12 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.6.3
+
+### Patch Changes
+
+-   358f781: Upgrade eslint plugin prettier to alpha for prettier v3 support
+-   d33222d: fix: union support for update method data. dep upgrade
+
 ## 0.6.2
 
 ### Patch Changes
