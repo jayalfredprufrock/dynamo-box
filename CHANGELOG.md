@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.6.4
+
+### Patch Changes
+
+-   d87aa97: fix: bad update method data type
+
 ## 0.6.3
 
 ### Patch Changes
