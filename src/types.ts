@@ -28,12 +28,14 @@ export type DistOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : ne
 export type DistPartialSome<T, K extends keyof T> = T extends unknown ? PartialSome<T, K> : never;
 export type DistRequiredSome<T, K extends keyof T> = T extends unknown ? RequiredSome<T, K> : never;
 
+export type PK = string | number;
+
 /* Configuration Types --------------------------------------------------------------------------------------------------------- */
 
 // literal union of keys in the schema that are eligible to be primary hash/range keys
 export type ValidPrimaryKeys<S extends TSchema, E = never, T = Static<S>> = Exclude<
     {
-        [K in keyof T]-?: K extends string ? (T[K] extends string | number ? K : never) : never;
+        [K in keyof T]-?: K extends string ? (T[K] extends PK ? K : never) : never;
     }[keyof T],
     E
 >;
@@ -41,13 +43,13 @@ export type ValidPrimaryKeys<S extends TSchema, E = never, T = Static<S>> = Excl
 // grabs the names of the primary keys, handling optional sortKey
 export type PrimaryKeys<S extends TSchema, C extends DdbRepositoryConfig<S>> =
     | C['partitionKey']
-    | (C['sortKey'] extends undefined ? never : NonNullable<C['sortKey']>);
+    | (C['sortKey'] extends PK ? C['sortKey'] : never);
 
 // literal union of keys in the schema that are eligible to be GSI hash/range keys
 export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extends object
     ? Exclude<
           {
-              [K in keyof Merge<T>]: K extends string ? (T[K] extends string | number | undefined ? K : never) : never;
+              [K in keyof Merge<T>]: K extends string ? (T[K] extends PK | undefined ? K : never) : never;
           }[keyof T],
           E
       >
@@ -55,7 +57,7 @@ export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extend
 
 // grabs the names of the GSI keys, handling optional sortKey
 export type GsiKeys<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
-    ? C['gsis'][G]['partitionKey'] | (C['gsis'][G]['sortKey'] extends undefined ? never : NonNullable<C['gsis'][G]['sortKey']>)
+    ? C['gsis'][G]['partitionKey'] | (C['gsis'][G]['sortKey'] extends PK ? C['gsis'][G]['sortKey'] : never)
     : never;
 
 // captures changes to input based on transformer function
