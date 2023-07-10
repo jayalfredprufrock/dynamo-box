@@ -23,17 +23,17 @@
     },
     "peerDependencies": {
         "@aws-sdk/client-dynamodb": "^3.337.0",
-        "@sinclair/typebox": "^0.28.2",
+        "@sinclair/typebox": "^0.29.4",
         "@typemon/dynamon": "^4.3.0"
     },
     "devDependencies": {
         "@aws-sdk/client-dynamodb": "^3.337.0",
         "@changesets/cli": "^2.24.4",
-        "@sinclair/typebox": "^0.28.2",
+        "@sinclair/typebox": "^0.29.4",
         "@typemon/dynamon": "^4.3.0",
         "@types/node": "^18.0.3",
-        "@typescript-eslint/eslint-plugin": "^5.30.5",
-        "@typescript-eslint/parser": "^5.30.5",
+        "@typescript-eslint/eslint-plugin": "^6.0.0",
+        "@typescript-eslint/parser": "^6.0.0",
         "eslint": "^8.19.0",
         "eslint-config-prettier": "^8.5.0",
         "eslint-plugin-import": "^2.27.5",
@@ -42,7 +42,7 @@
         "eslint-plugin-simple-import-sort": "^10.0.0",
         "husky": "^8.0.1",
         "lint-staged": "^13.0.3",
-        "prettier": "^2.7.1",
+        "prettier": "^3.0.0",
         "typescript": "^5.0.4"
     },
     "publishConfig": {

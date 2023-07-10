@@ -71,9 +71,9 @@ export type Output<S extends TSchema, C extends DdbRepositoryConfig<S>> = C['tra
     : Static<S>;
 export type GsiOutput<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> = C['gsis'][G] extends Gsi<S>
     ? C['gsis'][G]['projection'] extends (keyof Static<S>)[]
-        ? Pick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G> | C['gsis'][G]['projection'][number]>
+        ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G> | C['gsis'][G]['projection'][number]>
         : C['gsis'][G]['projection'] extends 'KEYS'
-        ? Pick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G>>
+        ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G>>
         : Output<S, C>
     : never;
 
@@ -121,7 +121,9 @@ export type CreateOptions = Omit<Dynamon.Put, 'tableName' | 'returnValues' | 'it
 export type PutOptions = Omit<Dynamon.Put, 'tableName' | 'item' | 'returnValues'> & OperationOptions;
 
 export type UpdateKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
-export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> = ExpressionSpec | Omit<Partial<Static<S>>, PrimaryKeys<S, C>>;
+export type UpdateData<S extends TSchema, C extends DdbRepositoryConfig<S>> =
+    | ExpressionSpec
+    | DistOmit<Partial<Static<S>>, PrimaryKeys<S, C>>;
 export type UpdateOptions = Omit<Dynamon.Update, 'tableName' | 'returnValues' | 'updateExpressionSpec' | 'primaryKey'> & OperationOptions;
 
 export type DeleteKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
