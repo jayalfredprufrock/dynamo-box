@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.7.0
+
+### Minor Changes
+
+-   8fc0f89: feat: paginated query
+
 ## 0.6.4
 
 ### Patch Changes
