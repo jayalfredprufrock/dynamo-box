@@ -143,9 +143,9 @@ export const makeDdbRepository =
 
                 const conditions: ExpressionSpec[] = [equal(config.partitionKey, key[config.partitionKey])];
 
-                const { keyConditionExpressionSpec: rangeCondition, ...otherOptions } = options ?? {};
-                if (rangeCondition) {
-                    conditions.push(rangeCondition);
+                const { keyConditionExpressionSpec: sortKeyCondition, ...otherOptions } = options ?? {};
+                if (sortKeyCondition) {
+                    conditions.push(sortKeyCondition);
                 }
 
                 const items = await this.db.queryAll({
@@ -169,6 +169,30 @@ export const makeDdbRepository =
                 }
 
                 return itemsOutput;
+            }
+
+            async *queryPaged(key: QueryKeysObj<S, C>, options?: QueryOptions): AsyncGenerator<Output<S, C>[]> {
+                const conditions: ExpressionSpec[] = [equal(config.partitionKey, key[config.partitionKey])];
+
+                const { keyConditionExpressionSpec: sortKeyCondition, ...otherOptions } = options ?? {};
+                if (sortKeyCondition) {
+                    conditions.push(sortKeyCondition);
+                }
+
+                const paginator = this.db.query$({
+                    tableName: this.tableName,
+                    keyConditionExpressionSpec: and(conditions),
+                    skipEmptyPage: true,
+                    ...otherOptions,
+                });
+
+                for await (const page of paginator) {
+                    let itemsOutput = page.items as Output<S, C>[];
+                    if (config.transformOutput) {
+                        itemsOutput = page.items.map(config.transformOutput) as Output<S, C>[];
+                    }
+                    yield itemsOutput;
+                }
             }
 
             async create(data: Input<S, C>, options?: CreateOptions): Promise<Output<S, C>> {
