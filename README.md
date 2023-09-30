@@ -1,6 +1,6 @@
 # dynamo-box
 
-Dynamo-box leverages TypeBox to provide a strongly typed repository client for interacting with DynamoDb tables. **Remain safe in the box.**
+Dynamo-box leverages [TypeBox](https://github.com/sinclairzx81/typebox) to provide a strongly typed repository client for interacting with DynamoDb tables. **Remain safe in the box.**
 
 This library also currently leverages [Dynamon](https://gitlab.com/monster-space-network/typemon/dynamon) for marshalling and building expressions, so be sure to visit their docs for additional usage information, especially in regards to conditional/update expressions.
 
@@ -24,7 +24,7 @@ export const UserSchema = Type.Object({
 });
 ```
 
-Use the `makeDdbRepository()` to create a fully-typed repository class
+Use `makeDdbRepository()` to create a fully-typed repository class:
 
 ```typescript
 import { makeDdbRepository } from '@jayalfredprufrock/dynamo-box';
