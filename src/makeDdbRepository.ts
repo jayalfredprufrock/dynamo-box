@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
-import { and, attributeNotExists, Dynamon, equal, set, update } from '@typemon/dynamon';
+import { and, attributeNotExists, Dynamon, equal, remove, set, update } from '@typemon/dynamon';
 import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 import { EventEmitter } from 'events';
 import TypedEventEmitter from 'typed-emitter';
@@ -235,12 +235,7 @@ export const makeDdbRepository =
 
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
-                    : update(
-                          ...Object.keys(removeUndefined(dataOrExpression))
-                              .filter(k => k !== config.partitionKey && k !== config.sortKey)
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              .map(k => set(k, (dataOrExpression as any)[k]))
-                      );
+                    : update(...Object.entries(dataOrExpression).map(([key, val]) => (val === undefined ? remove(key) : set(key, val))));
 
                 const item = await this.db.update({
                     tableName: this.tableName,
