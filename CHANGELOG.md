@@ -1,5 +1,12 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.7.0
+
+### Minor Changes
+
+-   8fc0f89: feat: paginated query
+-   9b3b7f4: feat: remove attributes when explicitly using undefined in updates
+
 ## 0.6.4
 
 ### Patch Changes
