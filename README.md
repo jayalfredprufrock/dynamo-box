@@ -110,4 +110,6 @@ It is currently being used in production environments so I welcome brave communi
 -   handle transformInput a little better so its obvious that the input is providing defaults.
     will probably involve specifying a transformInput schema (which can also provide runtime type safety)
     or switching to specifying default/readonly fields for create/update
--   make special case for TTL field, support function that automatically sets it based on da
+-   make special case for TTL field, support function that automatically sets it based on data
+-   remove undefined values from update expression object values
+-   bulk operations that perform non-batch operations in parallell (for conditions and consistent logging interface)

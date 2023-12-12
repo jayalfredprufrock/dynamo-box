@@ -23,7 +23,7 @@
     },
     "peerDependencies": {
         "@aws-sdk/client-dynamodb": "^3.337.0",
-        "@sinclair/typebox": "^0.28.2 || ^0.29.4",
+        "@sinclair/typebox": "^0.32.0-dev || >0.28.0",
         "@typemon/dynamon": "^4.3.0"
     },
     "devDependencies": {

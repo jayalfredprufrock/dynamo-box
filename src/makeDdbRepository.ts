@@ -70,10 +70,11 @@ export const makeDdbRepository =
             // type depending on the context, this utility function can be used to
             // make sure all other properties get stripped
             getPrimaryKey(keys: GetKeysObj<S, C>): GetKeysObj<S, C> {
+                const primaryKey = { [config.partitionKey]: keys[config.partitionKey] } as GetKeysObj<S, C>;
                 if (!config.sortKey) {
-                    return { [config.partitionKey]: keys[config.partitionKey] } as GetKeysObj<S, C>;
+                    return primaryKey;
                 }
-                return { [config.partitionKey]: keys[config.partitionKey], [config.sortKey]: keys[config.sortKey] } as GetKeysObj<S, C>;
+                return { ...primaryKey, [config.sortKey]: keys[config.sortKey] };
             }
 
             async scan(options?: ScanOptions): Promise<Output<S, C>[]> {
@@ -396,6 +397,9 @@ export const makeDdbRepository =
                 };
             }
 
+            // TODO: should normalize response to use "keys" intead of primaryKey
+            // so the unprocessed can be fed back in
+            // TODO: retry unprocessed items w/ exponential backoff
             async batchWrite(batchOps: BatchWriteOps<S, C>, options?: BatchWriteOptions): Promise<BatchWriteOutput<S, C>> {
                 const time = Date.now();
                 const start = process.hrtime();
