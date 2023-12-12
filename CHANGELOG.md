@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.8.0
+
+### Minor Changes
+
+-   26c2e2a: Target latest typebox dev release
+
 ## 0.7.0
 
 ### Minor Changes
