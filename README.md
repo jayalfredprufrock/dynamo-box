@@ -100,6 +100,7 @@ It is currently being used in production environments so I welcome brave communi
 -   transact write/get items support
 -   modify return type based on filter projection
 -   strongly typed equality filter support
+-   transformInput/Output async support
 -   explore integrating mongodb-style conditional expressions
     for safer typings and less reliance on dynamon.
 -   alternatively, provide strongly-typed "condition builder"
