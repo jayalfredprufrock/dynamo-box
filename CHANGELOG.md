@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.8.1
+
+### Patch Changes
+
+-   632d1c0: chore: upgrade typebox to latest stable
+
 ## 0.8.0
 
 ### Minor Changes
