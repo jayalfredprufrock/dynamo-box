@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.0
+
+### Minor Changes
+
+-   667d7d9: feat: new exists methods and more gsi variants
+
 ## 0.8.1
 
 ### Patch Changes
