@@ -1,8 +1,9 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Static, TSchema } from '@sinclair/typebox';
-import { and, attributeNotExists, Dynamon, equal, remove, set, update } from '@typemon/dynamon';
+import { and, attributeNotExists, Dynamon, equal, project, update } from '@typemon/dynamon';
 import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 import { EventEmitter } from 'events';
+import sift from 'sift';
 import TypedEventEmitter from 'typed-emitter';
 
 import {
@@ -36,7 +37,7 @@ import {
     UpdateKeysObj,
     UpdateOptions,
 } from './types.js';
-import { hrTimeToMs, removeUndefined } from './util.js';
+import { buildUpdateExpression, hrTimeToMs, removeUndefined } from './util.js';
 
 export const makeDdbRepository =
     <S extends TSchema>(schema: S) =>
@@ -114,17 +115,26 @@ export const makeDdbRepository =
                 }
             }
 
-            async get(keys: GetKeysObj<S, C>, options?: GetOptions): Promise<Output<S, C> | undefined> {
+            async get(keys: GetKeysObj<S, C>, options?: GetOptions<S, C>): Promise<Output<S, C> | undefined> {
                 const time = Date.now();
                 const start = process.hrtime();
+
+                const { assert, ...otherOptions } = options ?? {};
 
                 const item = await this.db.get({
                     tableName: this.tableName,
                     primaryKey: this.getPrimaryKey(keys),
-                    ...options,
+                    ...otherOptions,
                 });
 
-                const output = item !== undefined ? config.transformOutput?.(item) ?? item : undefined;
+                let output = item !== undefined ? config.transformOutput?.(item) ?? item : undefined;
+
+                if (output && assert) {
+                    const checkAssertion = typeof assert === 'function' ? assert : sift(assert);
+                    if (!checkAssertion(item)) {
+                        output = undefined;
+                    }
+                }
 
                 if (options?.log !== false) {
                     this.logger.emit('operation', {
@@ -136,6 +146,15 @@ export const makeDdbRepository =
                 }
 
                 return output;
+            }
+
+            async getOrThrow(keys: GetKeysObj<S, C>, options?: GetOptions<S, C>): Promise<Output<S, C>> {
+                const item = await this.get(keys, options);
+                if (!item) {
+                    throw new Error(`Item in table ${this.tableName} not found.`);
+                }
+
+                return item;
             }
 
             async query(key: QueryKeysObj<S, C>, options?: QueryOptions): Promise<Output<S, C>[]> {
@@ -236,7 +255,7 @@ export const makeDdbRepository =
 
                 const updateExpressionSpec = isExpressionSpec(dataOrExpression)
                     ? dataOrExpression
-                    : update(...Object.entries(dataOrExpression).map(([key, val]) => (val === undefined ? remove(key) : set(key, val))));
+                    : update(buildUpdateExpression(dataOrExpression));
 
                 const item = await this.db.update({
                     tableName: this.tableName,
@@ -319,6 +338,30 @@ export const makeDdbRepository =
                 return itemsOutput;
             }
 
+            async *scanGsiPaged<G extends GsiNames<S, C>>(indexName: G, options?: ScanGsiOptions): AsyncGenerator<GsiOutput<S, C, G>[]> {
+                const gsi = config.gsis?.[indexName];
+                if (!gsi) {
+                    throw new Error(`Unrecognized GSI "${indexName}"`);
+                }
+
+                const paginator = this.db.scan$({
+                    tableName: this.tableName,
+                    skipEmptyPage: true,
+                    indexName,
+                    ...options,
+                });
+
+                for await (const page of paginator) {
+                    let itemsOutput = page.items as GsiOutput<S, C, G>[];
+
+                    if ((gsi.projection === 'ALL' || !gsi?.projection) && config.transformOutput) {
+                        itemsOutput = page.items.map(config.transformOutput) as GsiOutput<S, C, G>[];
+                    }
+
+                    yield itemsOutput;
+                }
+            }
+
             async queryGsi<G extends GsiNames<S, C>>(
                 indexName: G,
                 keys: QueryGsiKeysObj<S, C, G>,
@@ -363,6 +406,42 @@ export const makeDdbRepository =
                 }
 
                 return itemsOutput;
+            }
+
+            async *queryGsiPaged<G extends GsiNames<S, C>>(
+                indexName: G,
+                keys: QueryGsiKeysObj<S, C, G>,
+                options?: QueryGsiOptions
+            ): AsyncGenerator<GsiOutput<S, C, G>[]> {
+                const gsi = config.gsis?.[indexName];
+                if (!gsi) {
+                    throw new Error(`Unrecognized GSI "${indexName}"`);
+                }
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const conditions: ExpressionSpec[] = Object.keys(removeUndefined(keys)).map(k => equal(k, (keys as any)[k]));
+                const { keyConditionExpressionSpec: rangeCondition, ...otherOptions } = options ?? {};
+                if (rangeCondition) {
+                    conditions.push(rangeCondition);
+                }
+
+                const paginator = this.db.query$({
+                    tableName: this.tableName,
+                    indexName,
+                    keyConditionExpressionSpec: and(conditions),
+                    skipEmptyPage: true,
+                    ...otherOptions,
+                });
+
+                for await (const page of paginator) {
+                    let itemsOutput = page.items as GsiOutput<S, C, G>[];
+                    if (config.transformOutput) {
+                        if ((gsi.projection === 'ALL' || !gsi?.projection) && config.transformOutput) {
+                            itemsOutput = page.items.map(config.transformOutput) as GsiOutput<S, C, G>[];
+                        }
+                    }
+                    yield itemsOutput;
+                }
             }
 
             async batchGet(batchKeys: GetKeysObj<S, C>[], options?: BatchGetOptions): Promise<BatchGetOutput<S, C>> {
@@ -453,6 +532,55 @@ export const makeDdbRepository =
                 if (!response || !response.length) return;
 
                 return response.map(op => (op as Dynamon.BatchWrite.Put).item) as Input<S, C>[];
+            }
+
+            async exists(
+                options?: Omit<QueryOptions, 'projectionExpressionSpec' | 'limit'> & { keys?: QueryKeysObj<S, C> }
+            ): Promise<boolean> {
+                const { keys, filterExpressionSpec, ...optionsWithoutKeys } = options ?? {};
+
+                // we can't rely on the limit when a filter expression spec is being passed, since the filter is
+                // applied after the scan/query page, so we only apply a limit of 1 when there is no filterExpressionSpec.
+                // otherwise, we page through the results and return true as soon as we see a single item
+                const optionsWithLimit: QueryOptions = {
+                    ...optionsWithoutKeys,
+                    filterExpressionSpec,
+                    projectionExpressionSpec: project(config.partitionKey),
+                    limit: filterExpressionSpec ? undefined : 1,
+                };
+
+                const pagedItems = keys ? this.queryPaged(keys, optionsWithLimit) : this.scanPaged(optionsWithLimit);
+
+                for await (const items of pagedItems) {
+                    if (items.length) return true;
+                }
+
+                return false;
+            }
+
+            async existsGsi<G extends GsiNames<S, C>>(
+                gsi: G,
+                options?: Omit<QueryGsiOptions, 'projectionExpressionSpec' | 'limit'> & { keys?: QueryGsiKeysObj<S, C, G> }
+            ): Promise<boolean> {
+                const { keys, filterExpressionSpec, ...optionsWithoutKeys } = options ?? {};
+
+                // we can't rely on the limit when a filter expression spec is being passed, since the filter is
+                // applied after the scan/query page, so we only apply a limit of 1 when there is no filterExpressionSpec.
+                // otherwise, we page through the results and return true as soon as we see a single item
+                const optionsWithLimit: QueryOptions = {
+                    ...optionsWithoutKeys,
+                    filterExpressionSpec,
+                    projectionExpressionSpec: project(config.partitionKey),
+                    limit: filterExpressionSpec ? undefined : 1,
+                };
+
+                const pagedItems = keys ? this.queryGsiPaged(gsi, keys, optionsWithLimit) : this.scanGsiPaged(gsi, optionsWithLimit);
+
+                for await (const items of pagedItems) {
+                    if (items.length) return true;
+                }
+
+                return false;
             }
         }
 

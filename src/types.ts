@@ -104,6 +104,8 @@ export interface DdbRepositoryConfig<S extends TSchema = TSchema> {
 // subset of configuration type that can be configured at runtime via constructor
 export type DdbRepositoryRuntimeConfig = Pick<DdbRepositoryConfig, 'client' | 'tableName' | 'validate'>;
 
+export type Assert<S extends TSchema, C extends DdbRepositoryConfig<S>> = ((output: Output<S, C>) => boolean) | Partial<Static<S>>;
+
 /* Operation Types -------------------------------------------------------------------------------------------------------------- */
 
 export type OperationOptions = { log?: boolean };
@@ -113,7 +115,8 @@ export type ScanOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName'> & Operat
 export type ScanGsiOptions = Omit<Dynamon.Scan, 'tableName' | 'indexName' | 'consistentRead'> & OperationOptions;
 
 export type GetKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, PrimaryKeys<S, C>>;
-export type GetOptions = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> & OperationOptions;
+export type GetOptions<S extends TSchema, C extends DdbRepositoryConfig<S>> = Omit<Dynamon.Get, 'tableName' | 'primaryKey'> &
+    OperationOptions & { assert?: Assert<S, C> };
 
 export type QueryKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>> = Pick<Static<S>, C['partitionKey']>;
 export type QueryOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName'>, 'keyConditionExpressionSpec'> & OperationOptions;

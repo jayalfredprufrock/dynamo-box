@@ -95,6 +95,11 @@ It is currently being used in production environments so I welcome brave communi
 ### Wishlist
 
 -   update() not transforming input, thus not getting updatedAt
+-   create() not transforming output
+-   expression based update() not transforming input. Are timestamps the only use case for that?
+-   should a distinction be made between "defaults" and "generated/computed" values?
+-   leverage typebox decoder/encoder for transform support
+-   update() should take array of expressions and not require wrapping in dynamon update()
 -   atomic field (optimistic lock) support that automatically generates condition expression based on something like updatedAt or version
 -   transformer support projected GSIs
 -   transact write/get items support
@@ -106,6 +111,7 @@ It is currently being used in production environments so I welcome brave communi
 -   alternatively, provide strongly-typed "condition builder"
 -   ability to create tables (or definitions) based on config
 -   createOrUpdate() and make put() require _complete_ type object?
+-   update() support nested path syntax for simple updates
 -   utility to create projectionFilter from schema
 -   use special schema field to indicate basic mapping type and generate mapping automatically
 -   handle transformInput a little better so its obvious that the input is providing defaults.
@@ -114,3 +120,13 @@ It is currently being used in production environments so I welcome brave communi
 -   make special case for TTL field, support function that automatically sets it based on data
 -   remove undefined values from update expression object values
 -   bulk operations that perform non-batch operations in parallell (for conditions and consistent logging interface)
+-   allow typebox schemas for projection and filter conditions
+-   count() method that automatically projects partition key only and returns number
+-   isEmpty() method that counts (with limit of 1) and returns true/false
+-   make it easier to override methods, potentially by not producing an anonymous class
+-   paged versions of scanGsi and queryGsi
+-   transformOutput should not be run when a projectionExpression is used
+-   automatically remove keys from update expressions? potentially anything "readonly" as well
+-   getGsi() and getGsiOrThrow() that fetches one record
+-   get() (optionally gsi variants) that allow a simple condition expression and pretends like
+    document doesn't exist if condition fails (useful for permission stuff)
