@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.1
+
+### Patch Changes
+
+-   5ee37bc: fix: transformOutput called on missing items
+
 ## 0.9.0
 
 ### Minor Changes
