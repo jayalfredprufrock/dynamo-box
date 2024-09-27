@@ -127,7 +127,7 @@ export const makeDdbRepository =
                     ...otherOptions,
                 });
 
-                let output = item !== undefined ? config.transformOutput?.(item) ?? item : undefined;
+                let output = item ? config.transformOutput?.(item) ?? item : undefined;
 
                 if (output && assert) {
                     const checkAssertion = typeof assert === 'function' ? assert : sift(assert);
@@ -290,7 +290,7 @@ export const makeDdbRepository =
                     ...options,
                 });
 
-                const prevOutput = prevItem !== undefined ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
+                const prevOutput = prevItem ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
 
                 if (options?.log !== false) {
                     this.logger.emit('operation', {
