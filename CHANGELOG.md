@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.2
+
+### Patch Changes
+
+-   96d0a1f: chore: update typebox
+
 ## 0.9.1
 
 ### Patch Changes
