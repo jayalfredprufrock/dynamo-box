@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { Static, TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, project, update } from '@typemon/dynamon';
 import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
 import { EventEmitter } from 'events';
@@ -127,7 +127,7 @@ export const makeDdbRepository =
                     ...otherOptions,
                 });
 
-                let output = item ? config.transformOutput?.(item) ?? item : undefined;
+                let output = item ? (config.transformOutput?.(item) ?? item) : undefined;
 
                 if (output && assert) {
                     const checkAssertion = typeof assert === 'function' ? assert : sift(assert);
@@ -290,7 +290,7 @@ export const makeDdbRepository =
                     ...options,
                 });
 
-                const prevOutput = prevItem ? config.transformOutput?.(prevItem) ?? prevItem : undefined;
+                const prevOutput = prevItem ? (config.transformOutput?.(prevItem) ?? prevItem) : undefined;
 
                 if (options?.log !== false) {
                     this.logger.emit('operation', {
