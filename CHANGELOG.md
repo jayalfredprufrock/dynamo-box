@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.3
+
+### Patch Changes
+
+-   bc5295f: fix: remove duplicate batch get keys
+
 ## 0.9.2
 
 ### Patch Changes
