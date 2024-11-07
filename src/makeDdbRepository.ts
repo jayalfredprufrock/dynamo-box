@@ -448,9 +448,16 @@ export const makeDdbRepository =
                 const time = Date.now();
                 const start = process.hrtime();
 
+                // remove duplicate keys
+                const primaryKeysMap = new Map<string, GetKeysObj<S, C>>();
+                batchKeys.map(keys => {
+                    const pks = this.getPrimaryKey(keys);
+                    primaryKeysMap.set(JSON.stringify(pks), pks);
+                });
+
                 const { responses, unprocessed } = await this.db.batchGet({
                     [this.tableName]: {
-                        primaryKeys: batchKeys.map(this.getPrimaryKey),
+                        primaryKeys: [...primaryKeysMap.values()],
                         ...options,
                     },
                 });
