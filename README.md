@@ -130,3 +130,4 @@ It is currently being used in production environments so I welcome brave communi
 -   getGsi() and getGsiOrThrow() that fetches one record
 -   get() (optionally gsi variants) that allow a simple condition expression and pretends like
     document doesn't exist if condition fails (useful for permission stuff)
+-   should event item object be transformed?

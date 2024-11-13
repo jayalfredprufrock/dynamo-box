@@ -48,25 +48,25 @@ export type PrimaryKeys<S extends TSchema, C extends DdbRepositoryConfig<S>> =
 // literal union of keys in the schema that are eligible to be GSI hash/range keys
 export type ValidGsiKeys<S extends TSchema, E = never, T = Static<S>> = T extends object
     ? Exclude<
-          {
-              [K in keyof Merge<T>]: K extends string ? (T[K] extends PK | undefined ? K : never) : never;
-          }[keyof T],
-          E
-      >
+        {
+            [K in keyof Merge<T>]: K extends string ? (T[K] extends PK | undefined ? K : never) : never;
+        }[keyof T],
+        E
+    >
     : never;
 
 // grabs the names of the GSI keys, handling optional sortKey
 export type GsiKeys<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> =
     C['gsis'][G] extends Gsi<S>
-        ? C['gsis'][G]['partitionKey'] | (C['gsis'][G]['sortKey'] extends PK ? C['gsis'][G]['sortKey'] : never)
-        : never;
+    ? C['gsis'][G]['partitionKey'] | (C['gsis'][G]['sortKey'] extends PK ? C['gsis'][G]['sortKey'] : never)
+    : never;
 
 // captures changes to input based on transformer function
 export type InputTransformer<S extends TSchema, I = Static<S>> = (input: I) => Static<S>;
 export type Input<S extends TSchema, C extends DdbRepositoryConfig<S>> =
     C['transformInput'] extends InputTransformer<S>
-        ? DistPartialSome<Static<S>, Subtract<RequiredKeys<Static<S>>, RequiredKeys<Parameters<C['transformInput']>[0]>>>
-        : Static<S>;
+    ? DistPartialSome<Static<S>, Subtract<RequiredKeys<Static<S>>, RequiredKeys<Parameters<C['transformInput']>[0]>>>
+    : Static<S>;
 
 // captures changes to output based on transformer function
 export type OutputTransformer<S extends TSchema, O = Static<S>> = (output: Static<S>) => O;
@@ -74,12 +74,12 @@ export type Output<S extends TSchema, C extends DdbRepositoryConfig<S>> =
     C['transformOutput'] extends OutputTransformer<S> ? ReturnType<C['transformOutput']> : Static<S>;
 export type GsiOutput<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> =
     C['gsis'][G] extends Gsi<S>
-        ? C['gsis'][G]['projection'] extends (keyof Static<S>)[]
-            ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G> | C['gsis'][G]['projection'][number]>
-            : C['gsis'][G]['projection'] extends 'KEYS'
-              ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G>>
-              : Output<S, C>
-        : never;
+    ? C['gsis'][G]['projection'] extends (keyof Static<S>)[]
+    ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G> | C['gsis'][G]['projection'][number]>
+    : C['gsis'][G]['projection'] extends 'KEYS'
+    ? DistPick<Static<S>, PrimaryKeys<S, C> | GsiKeys<S, C, G>>
+    : Output<S, C>
+    : never;
 
 // GSI index names
 export type GsiNames<S extends TSchema, C extends DdbRepositoryConfig<S>> = Extract<keyof C['gsis'], string>;
@@ -138,8 +138,8 @@ export type DeleteOptions = Omit<Dynamon.Delete, 'tableName' | 'returnValues' | 
 
 export type QueryGsiKeysObj<S extends TSchema, C extends DdbRepositoryConfig<S>, G extends GsiNames<S, C>> =
     C['gsis'][G] extends Gsi<S>
-        ? Required<DistPick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<DistPick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
-        : never;
+    ? Required<DistPick<Static<S>, C['gsis'][G]['partitionKey']>> & Partial<DistPick<Static<S>, NonNullable<C['gsis'][G]['sortKey']>>>
+    : never;
 export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'indexName' | 'consistentRead'>, 'keyConditionExpressionSpec'> &
     OperationOptions;
 
@@ -224,6 +224,13 @@ export type DdbRepositoryOpLogEvent<S extends TSchema> =
     | DdbRepositoryBatchGetLog
     | DdbRepositoryBatchWriteLog;
 
+export interface DdbRepositoryWriteEvent<S extends TSchema> {
+    time: number;
+    operation: 'PUT' | 'UPDATE' | 'BATCH_WRITE';
+    item: Static<S>;
+}
+
 export type DdbRepositoryEvents<S extends TSchema> = {
-    operation: (op: DdbRepositoryOpLogEvent<S>) => void;
+    operation: (event: DdbRepositoryOpLogEvent<S>) => void;
+    write: (event: DdbRepositoryWriteEvent<S>) => void;
 };
