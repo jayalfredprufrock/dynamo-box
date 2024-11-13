@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.4
+
+### Patch Changes
+
+-   4627237: feat: add new write event
+
 ## 0.9.3
 
 ### Patch Changes
