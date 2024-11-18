@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.9.5
+
+### Patch Changes
+
+-   fe307f4: chore: upgrade deps and add latest typebox version to optional peer deps
+
 ## 0.9.4
 
 ### Patch Changes
