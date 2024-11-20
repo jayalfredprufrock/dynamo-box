@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.10.0
+
+### Minor Changes
+
+-   2dff5a1: feat: assert support for batch get
+
 ## 0.9.5
 
 ### Patch Changes
