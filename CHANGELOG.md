@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.11.0
+
+### Minor Changes
+
+-   4dc3157: fix: changes to batch op return types
+
 ## 0.10.0
 
 ### Minor Changes
