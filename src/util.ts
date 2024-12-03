@@ -23,5 +23,5 @@ export const hrTimeToMs = (startTime?: [number, number]): number => {
 
 export const buildUpdateExpression = (data: Record<string, unknown>, options?: { pathPrefix?: string }): ExpressionSpec[] => {
     const { pathPrefix = '' } = options ?? {};
-    return Object.entries(data).map(([key, val]) => (val === undefined ? remove(key) : set(`${pathPrefix}${key}`, val)));
+    return Object.entries(data).map(([key, val]) => (val === undefined ? remove(key) : set(`${pathPrefix}${key}`, removeUndefined(val))));
 };
