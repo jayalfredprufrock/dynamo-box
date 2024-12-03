@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.11.2
+
+### Patch Changes
+
+-   10410df: fix: remove undefined values from update expressions
+
 ## 0.11.1
 
 ### Patch Changes
