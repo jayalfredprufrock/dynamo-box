@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.11.4
+
+### Patch Changes
+
+-   09bce1f: fix: improper unprocessed item detection in batchPut
+
 ## 0.11.3
 
 ### Patch Changes
