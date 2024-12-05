@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.11.3
+
+### Patch Changes
+
+-   126a47f: fix: batchPut should return all successfully PUT items or throw
+
 ## 0.11.2
 
 ### Patch Changes
