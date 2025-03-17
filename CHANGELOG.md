@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.11.5
+
+### Patch Changes
+
+-   d9faf8d: fix: treat query limit as scanned limit
+
 ## 0.11.4
 
 ### Patch Changes
