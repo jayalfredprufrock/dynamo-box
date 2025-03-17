@@ -39,6 +39,12 @@ import {
 } from './types.js';
 import { buildUpdateExpression, hrTimeToMs, removeUndefined } from './util.js';
 
+// TODO: FIX ME
+// "limit" in queryAll command just limits the size of each
+// page, and will still scan the entire table...regular "query"
+// only returns first page. Solution is to use paginated query
+// and concatenateWhile() to break on the scannedCount
+
 export const makeDdbRepository =
     <S extends TSchema>(schema: S) =>
     <C extends DdbRepositoryConfig<S>>(config: C) => {
@@ -173,15 +179,19 @@ export const makeDdbRepository =
                     conditions.push(sortKeyCondition);
                 }
 
-                const items = await this.db.queryAll({
+                const result = await this.db.query({
                     tableName: this.tableName,
                     keyConditionExpressionSpec: and(conditions),
+                    concatenateWhile: page => {
+                        if (!options?.limit) return true;
+                        return page.scannedCount < options.limit;
+                    },
                     ...otherOptions,
                 });
 
-                let itemsOutput = items as Output<S, C>[];
+                let itemsOutput = result.items as Output<S, C>[];
                 if (config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
+                    itemsOutput = result.items.map(config.transformOutput) as Output<S, C>[];
                 }
 
                 if (options?.log !== false) {
@@ -189,7 +199,7 @@ export const makeDdbRepository =
                         operation: 'QUERY',
                         time,
                         duration: hrTimeToMs(start),
-                        itemCount: items.length,
+                        itemCount: itemsOutput.length,
                     });
                 }
 
@@ -399,17 +409,21 @@ export const makeDdbRepository =
                     conditions.push(rangeCondition);
                 }
 
-                const items = await this.db.queryAll({
+                const result = await this.db.query({
                     tableName: this.tableName,
                     indexName,
                     keyConditionExpressionSpec: and(conditions),
+                    concatenateWhile: page => {
+                        if (!options?.limit) return true;
+                        return page.scannedCount < options.limit;
+                    },
                     ...otherOptions,
                 });
 
-                let itemsOutput = items as GsiOutput<S, C, G>[];
+                let itemsOutput = result.items as GsiOutput<S, C, G>[];
 
                 if ((gsi.projection === 'ALL' || !gsi?.projection) && config.transformOutput) {
-                    itemsOutput = items.map(config.transformOutput) as GsiOutput<S, C, G>[];
+                    itemsOutput = result.items.map(config.transformOutput) as GsiOutput<S, C, G>[];
                 }
 
                 if (options?.log !== false) {
@@ -418,7 +432,7 @@ export const makeDdbRepository =
                         time,
                         indexName,
                         duration: hrTimeToMs(start),
-                        itemCount: items.length,
+                        itemCount: itemsOutput.length,
                     });
                 }
 
