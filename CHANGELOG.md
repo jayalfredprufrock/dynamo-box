@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.12.1
+
+### Patch Changes
+
+-   ee07de3: fix: batchGet parallel arrays not unique refs
+
 ## 0.12.0
 
 ### Minor Changes
