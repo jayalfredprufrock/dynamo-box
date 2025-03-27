@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.12.2
+
+### Patch Changes
+
+-   6cd0bc3: fix: dont hardcode batch count
+
 ## 0.12.1
 
 ### Patch Changes
