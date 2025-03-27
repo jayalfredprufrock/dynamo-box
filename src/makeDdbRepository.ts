@@ -491,7 +491,7 @@ export const makeDdbRepository =
                 const parallelBatchCount = Math.min(Math.ceil(primaryKeysMap.size / 100), maxParallelRequests);
 
                 let i = 0;
-                const parallelBatches = new Array<GetKeysObj<S, C>[]>(parallelBatchCount).fill([]);
+                const parallelBatches = Array.from({ length: 6 }).map<GetKeysObj<S, C>[]>(() => []);
                 for (const pk of primaryKeysMap.values()) {
                     parallelBatches[i++ % parallelBatchCount].push(pk);
                 }
