@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.12.0
+
+### Minor Changes
+
+-   47ebbad: feat: batchGet parallelRequestSize option
+
 ## 0.11.5
 
 ### Patch Changes
