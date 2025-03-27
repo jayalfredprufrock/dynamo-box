@@ -476,7 +476,7 @@ export const makeDdbRepository =
             }
 
             async batchGet(batchKeys: GetKeysObj<S, C>[], options?: BatchGetOptions<S, C>): Promise<BatchGetOutput<S, C>> {
-                const { assert, ...otherOptions } = options ?? {};
+                const { assert, maxParallelRequests = 1, ...otherOptions } = options ?? {};
 
                 const time = Date.now();
                 const start = process.hrtime();
@@ -488,14 +488,32 @@ export const makeDdbRepository =
                     primaryKeysMap.set(JSON.stringify(pks), pks);
                 });
 
-                const { responses, unprocessed } = await this.db.batchGet({
-                    [this.tableName]: {
-                        primaryKeys: [...primaryKeysMap.values()],
-                        ...otherOptions,
-                    },
-                });
+                const parallelBatchCount = Math.min(Math.ceil(primaryKeysMap.size / 100), maxParallelRequests);
 
-                const items = (responses[this.tableName] as Static<S>[] | undefined) ?? [];
+                let i = 0;
+                const parallelBatches = new Array<GetKeysObj<S, C>[]>(parallelBatchCount).fill([]);
+                for (const pk of primaryKeysMap.values()) {
+                    parallelBatches[i++ % parallelBatchCount].push(pk);
+                }
+
+                const items: Static<S>[] = [];
+                const unprocessed: GetKeysObj<S, C>[] = [];
+
+                await Promise.all(
+                    parallelBatches.map(async primaryKeys => {
+                        return this.db
+                            .batchGet({
+                                [this.tableName]: { primaryKeys, ...otherOptions },
+                            })
+                            .then(result => {
+                                items.push(...result.responses[this.tableName]);
+                                unprocessed.push(
+                                    ...((result.unprocessed?.[this.tableName].primaryKeys as GetKeysObj<S, C>[] | undefined) ?? [])
+                                );
+                            });
+                    })
+                );
+
                 let itemsOutput = items as Output<S, C>[];
                 if (config.transformOutput) {
                     itemsOutput = items.map(config.transformOutput) as Output<S, C>[];
@@ -511,13 +529,13 @@ export const makeDdbRepository =
                         operation: 'BATCH_GET',
                         time,
                         duration: hrTimeToMs(start),
-                        unprocessedCount: unprocessed?.[this.tableName]?.primaryKeys.length ?? 0,
+                        unprocessedCount: unprocessed.length ?? 0,
                     });
                 }
 
                 return {
                     items: itemsOutput,
-                    unprocessed: unprocessed?.[this.tableName]?.primaryKeys as GetKeysObj<S, C>[] | undefined,
+                    unprocessed,
                 };
             }
 

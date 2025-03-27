@@ -144,7 +144,7 @@ export type QueryGsiOptions = PartialSome<Omit<Dynamon.Query, 'tableName' | 'ind
     OperationOptions;
 
 export type BatchGetOptions<S extends TSchema, C extends DdbRepositoryConfig<S>> = Omit<Dynamon.BatchGet.Operation, 'primaryKeys'> &
-    OperationOptions & { assert?: Assert<S, C> };
+    OperationOptions & { assert?: Assert<S, C>; maxParallelRequests?: number };
 
 export type BatchGetOutput<S extends TSchema, C extends DdbRepositoryConfig<S>> = {
     items: Output<S, C>[];
