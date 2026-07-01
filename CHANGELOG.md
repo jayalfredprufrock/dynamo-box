@@ -1,5 +1,11 @@
 # @jayalfredprufrock/dynamo-box
 
+## 0.13.0
+
+### Minor Changes
+
+-   deb05e4: Pure ESM and typebox v1. This is a breaking change
+
 ## 0.12.2
 
 ### Patch Changes
