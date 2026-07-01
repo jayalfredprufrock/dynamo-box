@@ -25,7 +25,7 @@ jobs:
               uses: actions/setup-node@v3
               with:
                   node-version: 18.x
-                  cache: 'npm'
+                  cache: "npm"
 
             - name: Install Dependencies
               run: npm i
@@ -39,5 +39,4 @@ jobs:
                   title: New Release
                   publish: npx changeset publish
               env:
-                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
