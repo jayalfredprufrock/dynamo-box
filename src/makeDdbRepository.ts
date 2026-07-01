@@ -1,10 +1,9 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import type { Static, TSchema } from '@sinclair/typebox';
 import { and, attributeNotExists, Dynamon, equal, project, update } from '@typemon/dynamon';
-import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec';
+import { ExpressionSpec, isExpressionSpec } from '@typemon/dynamon/dist/expression-spec.js';
 import { EventEmitter } from 'events';
 import sift from 'sift';
-import TypedEventEmitter from 'typed-emitter';
+import type { Static, TSchema } from 'typebox';
 
 import {
     BatchDeleteOptions,
@@ -39,6 +38,10 @@ import {
 } from './types.js';
 import { buildUpdateExpression, hrTimeToMs, removeUndefined } from './util.js';
 
+// sift's published types resolve to a namespace under NodeNext ESM interop, but its
+// runtime default export is the callable query builder, so we retype it accordingly.
+const siftQuery = sift as unknown as (query: unknown) => (item: unknown) => boolean;
+
 // TODO: FIX ME
 // "limit" in queryAll command just limits the size of each
 // page, and will still scan the entire table...regular "query"
@@ -54,7 +57,7 @@ export const makeDdbRepository =
             readonly db: Dynamon;
             readonly tableName: string;
             readonly validate: boolean;
-            readonly logger = new EventEmitter() as TypedEventEmitter<DdbRepositoryEvents<S>>;
+            readonly logger = new EventEmitter() as import('typed-emitter').default<DdbRepositoryEvents<S>>;
 
             constructor(runtimeConfig?: DdbRepositoryRuntimeConfig) {
                 const client = runtimeConfig?.client ?? config.client;
@@ -141,7 +144,7 @@ export const makeDdbRepository =
                 let output = item ? (config.transformOutput?.(item) ?? item) : undefined;
 
                 if (output && assert) {
-                    const checkAssertion = typeof assert === 'function' ? assert : sift(assert);
+                    const checkAssertion = typeof assert === 'function' ? assert : siftQuery(assert);
                     if (!checkAssertion(item)) {
                         output = undefined;
                     }
@@ -231,7 +234,7 @@ export const makeDdbRepository =
             }
 
             async create(data: Input<S, C>, options?: CreateOptions): Promise<Output<S, C>> {
-                const item = removeUndefined(config.transformInput?.(data) ?? data);
+                const item = removeUndefined(config.transformInput?.(data as Static<S>) ?? data);
                 const conditionExpressionSpec = attributeNotExists(config.partitionKey);
                 return this.put(item, { ...options, conditionExpressionSpec });
             }
@@ -240,7 +243,7 @@ export const makeDdbRepository =
                 const time = Date.now();
                 const start = process.hrtime();
 
-                const item = removeUndefined(config.transformInput?.(data) ?? data);
+                const item = removeUndefined(config.transformInput?.(data as Static<S>) ?? data);
 
                 const prevItem = await this.db.put({
                     tableName: this.tableName,
@@ -520,7 +523,7 @@ export const makeDdbRepository =
                 }
 
                 if (assert) {
-                    const checkAssertion = typeof assert === 'function' ? assert : sift(assert);
+                    const checkAssertion = typeof assert === 'function' ? assert : siftQuery(assert);
                     itemsOutput = itemsOutput.filter(item => checkAssertion(item));
                 }
 
@@ -551,7 +554,7 @@ export const makeDdbRepository =
                         if (op.type === 'Put') {
                             return {
                                 type: 'Put',
-                                item: removeUndefined(config.transformInput?.(op.item) ?? op.item),
+                                item: removeUndefined(config.transformInput?.(op.item as Static<S>) ?? op.item),
                             };
                         }
                         return {
@@ -581,13 +584,13 @@ export const makeDdbRepository =
                         this.logger.emit('write', {
                             operation: 'BATCH_WRITE',
                             time,
-                            item: r.item,
+                            item: r.item as Static<S>,
                         });
                     }
 
                     return {
                         ...r,
-                        item: config.transformOutput?.(r.item) ?? r.item,
+                        item: config.transformOutput?.(r.item as Static<S>) ?? r.item,
                     };
                 }) as BatchWriteOutput<S, C>;
             }
@@ -608,7 +611,7 @@ export const makeDdbRepository =
 
                 const putOps = batchItems.map(item => ({
                     type: 'Put' as const,
-                    item: removeUndefined(config.transformInput?.(item) ?? item),
+                    item: removeUndefined(config.transformInput?.(item as Static<S>) ?? item),
                 }));
 
                 const response = await this.db.batchWrite({ [this.tableName]: putOps });
@@ -620,11 +623,11 @@ export const makeDdbRepository =
                 // if we have unprocessed items, delete any that were successfully procesed before throwing
                 if (unprocessedItems.length) {
                     const processedItems = batchItems.filter(item => {
-                        const itemPk = this.getPrimaryKey(item);
-                        return !unprocessedItems.some(unprocessedItem => this.doItemKeysMatch(unprocessedItem, itemPk));
+                        const itemPk = this.getPrimaryKey(item as GetKeysObj<S, C>);
+                        return !unprocessedItems.some(unprocessedItem => this.doItemKeysMatch(unprocessedItem as GetKeysObj<S, C>, itemPk));
                     });
 
-                    await this.batchDelete(processedItems);
+                    await this.batchDelete(processedItems as DeleteKeysObj<S, C>[]);
 
                     throw new Error(
                         `Batch PUT failed to process ${unprocessedItems.length} item(s). Successfully processed items have been deleted.`

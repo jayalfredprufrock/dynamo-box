@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/ban-types */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import type { Static, TSchema } from '@sinclair/typebox';
 import { Dynamon, ExpressionSpec } from '@typemon/dynamon';
+import type { Static, TSchema } from 'typebox';
 
 /* Utility Types ------------------------------------------------------------------------------------------------------------- */
 export type CommonKeys<T extends object> = keyof T;
